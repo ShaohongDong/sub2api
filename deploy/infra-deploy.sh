@@ -7,7 +7,7 @@
 #
 # Usage examples:
 #   curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/infra-deploy.sh | bash
-#   ./infra-deploy.sh --mode infra --redis-major 7
+#   ./infra-deploy.sh --mode infra --redis-major 8
 #   ./infra-deploy.sh --mode full --redis-major 8 --server-port 8081
 # =============================================================================
 
@@ -27,7 +27,7 @@ ENV_TEMPLATE=".env.infra.example"
 ENV_FILE=".env.infra"
 
 MODE="full"
-REDIS_MAJOR="7"
+REDIS_MAJOR="8"
 NO_START="false"
 FORCE="false"
 BIND_HOST_OVERRIDE=""
@@ -67,7 +67,7 @@ Usage:
 
 Options:
   --mode <infra|full>       Deployment mode (default: full)
-  --redis-major <7|8>       Redis major version (default: 7)
+  --redis-major <7|8>       Redis major version (default: 8)
   --no-start                Only generate files, do not start containers
   --force                   Overwrite existing files without prompt
   --bind-host <host>        Override BIND_HOST in generated env file
@@ -202,6 +202,52 @@ run_compose() {
         set +a
         "${COMPOSE_CMD[@]}" -f "${COMPOSE_TEMPLATE}" "$@"
     )
+}
+
+get_env_value() {
+    local key="$1"
+    awk -F= -v key="$key" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "$ENV_FILE"
+}
+
+ensure_postgres_password_sync() {
+    local postgres_user
+    local postgres_password
+    local container_id
+    local sql_user
+    local sql_password
+
+    postgres_user="$(get_env_value "POSTGRES_USER")"
+    postgres_password="$(get_env_value "POSTGRES_PASSWORD")"
+
+    if [ -z "$postgres_user" ]; then
+        postgres_user="sub2api"
+    fi
+    if [ -z "$postgres_password" ]; then
+        print_error "POSTGRES_PASSWORD is missing in ${ENV_FILE}."
+        return 1
+    fi
+
+    container_id="$(run_compose ps -q postgres 2>/dev/null | head -n 1 || true)"
+    if [ -z "$container_id" ]; then
+        print_error "Unable to locate running postgres container."
+        return 1
+    fi
+
+    sql_user="${postgres_user//\"/\"\"}"
+    sql_password="${postgres_password//\'/\'\'}"
+
+    print_info "Synchronizing PostgreSQL credentials for user '${postgres_user}'..."
+    if docker exec -u postgres "$container_id" \
+        psql -v ON_ERROR_STOP=1 -U "$postgres_user" -d postgres \
+        -c "ALTER ROLE \"${sql_user}\" WITH PASSWORD '${sql_password}';" >/dev/null 2>&1; then
+        print_success "PostgreSQL credentials synchronized."
+        return 0
+    fi
+
+    print_error "Failed to synchronize PostgreSQL credentials for '${postgres_user}'."
+    print_warning "Recent logs for postgres:"
+    run_compose logs --tail=80 postgres || true
+    return 1
 }
 
 wait_for_service_health() {
@@ -349,7 +395,6 @@ parse_args() {
 
 main() {
     local script_dir=""
-    local services_to_start=()
     local health_url=""
     local health_attempt=0
     local max_health_attempts=30
@@ -421,19 +466,20 @@ main() {
     fi
 
     if [ "$MODE" = "infra" ]; then
-        services_to_start=(postgres redis)
         print_info "Starting PostgreSQL + Redis only (infra mode)..."
     else
-        services_to_start=(postgres redis sub2api)
-        print_info "Starting PostgreSQL + Redis + Sub2API (full mode)..."
+        print_info "Starting PostgreSQL + Redis (preparing full mode)..."
     fi
 
-    run_compose up -d "${services_to_start[@]}"
+    run_compose up -d postgres redis
 
     wait_for_service_health "postgres" 180
     wait_for_service_health "redis" 180
+    ensure_postgres_password_sync
 
     if [ "$MODE" = "full" ]; then
+        print_info "Starting Sub2API..."
+        run_compose up -d sub2api
         wait_for_service_health "sub2api" 240
         sub2api_port="$(awk -F= '/^SERVER_PORT=/{print $2}' "$ENV_FILE" | tail -n1)"
         health_url="http://127.0.0.1:${sub2api_port}/health"
