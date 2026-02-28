@@ -15,8 +15,11 @@ This directory contains files for deploying Sub2API on Linux servers.
 |------|-------------|
 | `docker-compose.yml` | Docker Compose configuration (named volumes) |
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
+| `docker-compose.infra.local.yml` | Docker Compose configuration (infra-first: PostgreSQL + Redis 7+, optional Sub2API) |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
+| `infra-deploy.sh` | Infrastructure-first deployment script (PG + Redis 7+, optional full stack) |
 | `.env.example` | Docker environment variables template |
+| `.env.infra.example` | Infra-first environment template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |
 | `sub2api.service` | Systemd service unit file |
@@ -94,14 +97,46 @@ docker-compose -f docker-compose.local.yml logs -f sub2api
 # http://localhost:8080
 ```
 
+### Method 3: Infrastructure-First Deployment (PostgreSQL + Redis 7+)
+
+Use this when you want to deploy PostgreSQL + Redis first, then optionally bring up Sub2API.
+
+```bash
+# One-click (default: full mode, Redis 7)
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/infra-deploy.sh | bash
+
+# Download then run with options
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/infra-deploy.sh -o infra-deploy.sh
+chmod +x infra-deploy.sh
+
+# Infra only: start PostgreSQL + Redis
+./infra-deploy.sh --mode infra --redis-major 7
+
+# Full stack: start PostgreSQL + Redis + Sub2API
+./infra-deploy.sh --mode full --redis-major 7
+
+# Switch to Redis 8+
+./infra-deploy.sh --mode full --redis-major 8
+```
+
+**What the script does:**
+- Prepares `docker-compose.infra.local.yml` and `.env.infra.example`
+- Generates `.env.infra` with secure secrets (`POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`)
+- Creates local data directories (`data/`, `postgres_data/`, `redis_data/`)
+- Supports two startup modes:
+  - `infra`: PostgreSQL + Redis only
+  - `full`: PostgreSQL + Redis + Sub2API
+- Runs health checks and prints actionable diagnostics on failure
+
 ### Deployment Version Comparison
 
 | Version | Data Storage | Migration | Best For |
 |---------|-------------|-----------|----------|
 | **docker-compose.local.yml** | Local directories (./data, ./postgres_data, ./redis_data) | ✅ Easy (tar entire directory) | Production, need frequent backups/migration |
+| **docker-compose.infra.local.yml** | Local directories (./data, ./postgres_data, ./redis_data) | ✅ Easy | Infra-first rollout (PG/Redis first, app later) |
 | **docker-compose.yml** | Named volumes (/var/lib/docker/volumes/) | ⚠️ Requires docker commands | Simple setup, don't need migration |
 
-**Recommendation:** Use `docker-compose.local.yml` (deployed by `docker-deploy.sh`) for easier data management and migration.
+**Recommendation:** Use `docker-compose.local.yml` for one-shot full deployment, or `docker-compose.infra.local.yml` when you need staged infrastructure rollout.
 
 ### How Auto-Setup Works
 
@@ -171,6 +206,22 @@ docker-compose -f docker-compose.local.yml down
 rm -rf data/ postgres_data/ redis_data/
 ```
 
+For **infrastructure-first version** (docker-compose.infra.local.yml + .env.infra):
+
+```bash
+# Start infra only
+docker compose -f docker-compose.infra.local.yml --env-file .env.infra up -d postgres redis
+
+# Start full stack
+docker compose -f docker-compose.infra.local.yml --env-file .env.infra up -d
+
+# View logs
+docker compose -f docker-compose.infra.local.yml --env-file .env.infra logs -f
+
+# Stop services
+docker compose -f docker-compose.infra.local.yml --env-file .env.infra down
+```
+
 For **named volumes version** (docker-compose.yml):
 
 ```bash
@@ -210,9 +261,10 @@ docker-compose down -v
 | `GEMINI_OAUTH_SCOPES` | No | *(default)* | OAuth scopes (Gemini OAuth) |
 | `GEMINI_QUOTA_POLICY` | No | *(empty)* | JSON overrides for Gemini local quota simulation (Code Assist only). |
 
-See `.env.example` for all available options.
+See `.env.example` (full deployment) or `.env.infra.example` (infra-first deployment) for all available options.
 
-> **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` for you.
+> **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD`.
+> The `infra-deploy.sh` script additionally generates `REDIS_PASSWORD` and writes everything to `.env.infra`.
 
 ### Easy Migration (Local Directory Version)
 

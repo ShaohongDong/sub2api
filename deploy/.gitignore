@@ -9,6 +9,7 @@ redis_data/
 
 # Environment configuration (contains sensitive information)
 .env
+.env.infra
 
 # Backup files
 *.backup
