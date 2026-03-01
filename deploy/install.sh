@@ -26,6 +26,9 @@ CONFIG_DIR="/etc/sub2api"
 SERVER_HOST="0.0.0.0"
 SERVER_PORT="8080"
 
+# Non-interactive mode (useful for wrapper scripts)
+NON_INTERACTIVE="false"
+
 # Language (default: zh = Chinese)
 LANG_CHOICE="zh"
 
@@ -313,6 +316,15 @@ print_error() {
 # Check if running interactively (can access terminal)
 # When piped (curl | bash), stdin is not a terminal, but /dev/tty may still be available
 is_interactive() {
+    if [ "$NON_INTERACTIVE" = "true" ]; then
+        return 1
+    fi
+
+    # A controlling TTY is required for safe /dev/tty reads.
+    if ! [ -t 2 ]; then
+        return 1
+    fi
+
     # Check if /dev/tty is available (works even when piped)
     [ -e /dev/tty ] && [ -r /dev/tty ] && [ -w /dev/tty ]
 }
@@ -361,7 +373,11 @@ validate_port() {
 configure_server() {
     # If not interactive (piped), use default settings
     if ! is_interactive; then
-        print_info "$(msg 'server_config_summary'): ${SERVER_HOST}:${SERVER_PORT} (default)"
+        if [ "$SERVER_HOST" = "0.0.0.0" ] && [ "$SERVER_PORT" = "8080" ]; then
+            print_info "$(msg 'server_config_summary'): ${SERVER_HOST}:${SERVER_PORT} (default)"
+        else
+            print_info "$(msg 'server_config_summary'): ${SERVER_HOST}:${SERVER_PORT}"
+        fi
         return
     fi
 
@@ -981,6 +997,33 @@ main() {
                 PURGE="true"
                 shift
                 ;;
+            --non-interactive)
+                NON_INTERACTIVE="true"
+                shift
+                ;;
+            --server-host)
+                if [ -n "${2:-}" ] && [[ ! "$2" =~ ^- ]]; then
+                    SERVER_HOST="$2"
+                    shift 2
+                else
+                    echo "Error: --server-host requires a host argument"
+                    exit 1
+                fi
+                ;;
+            --server-port)
+                if [ -n "${2:-}" ] && [[ ! "$2" =~ ^- ]]; then
+                    if validate_port "$2"; then
+                        SERVER_PORT="$2"
+                        shift 2
+                    else
+                        echo "Error: --server-port must be between 1 and 65535"
+                        exit 1
+                    fi
+                else
+                    echo "Error: --server-port requires a port argument"
+                    exit 1
+                fi
+                ;;
             -v|--version)
                 if [ -n "${2:-}" ] && [[ ! "$2" =~ ^- ]]; then
                     target_version="$2"
@@ -1115,6 +1158,9 @@ main() {
             echo "Options:"
             echo "  -v, --version <ver>  $(msg 'opt_version')"
             echo "  -y, --yes            Skip confirmation prompts (for uninstall)"
+            echo "  --non-interactive    Use defaults without TTY prompts"
+            echo "  --server-host <host> Set service listen address"
+            echo "  --server-port <port> Set service listen port"
             echo ""
             echo "Examples:"
             echo "  $0                        # Install latest version"

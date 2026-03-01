@@ -68,6 +68,28 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅（
 
 一键安装脚本，自动从 GitHub Releases 下载预编译的二进制文件。
 
+#### 极速一键部署（Ubuntu/Debian，自动安装依赖）
+
+如果你希望脚本自动处理 `PostgreSQL`、`Redis`、`curl`、`openssl` 等依赖，并自动完成初始化（无需 Setup Wizard），推荐使用：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/one-click-deploy.sh | bash
+```
+
+可选参数示例：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/one-click-deploy.sh | \
+  bash -s -- --server-port 8080 --admin-email admin@example.com --admin-password 'StrongPassword'
+```
+
+脚本会自动：
+1. 检测 Ubuntu/Debian 系统并安装依赖
+2. 配置本机 PostgreSQL + Redis（含随机强密码）
+3. 调用 `deploy/install.sh` 安装 Sub2API 二进制与 systemd 服务
+4. 写入 AUTO_SETUP 环境并自动初始化管理员账号
+5. 执行健康检查，并将凭据写入 `/etc/sub2api/.install-credentials`（仅 root 可读）
+
 #### 前置条件
 
 - Linux 服务器（amd64 或 arm64）
@@ -587,6 +609,7 @@ sub2api/
     ├── docker-compose.yml    # Docker Compose 配置
     ├── .env.example          # Docker Compose 环境变量
     ├── config.example.yaml   # 二进制部署完整配置文件
+    ├── one-click-deploy.sh   # 一键二进制部署（自动依赖）
     └── install.sh            # 一键安装脚本
 ```
 

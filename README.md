@@ -63,6 +63,28 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 
 One-click installation script that downloads pre-built binaries from GitHub Releases.
 
+#### Fastest path (Ubuntu/Debian, auto dependencies)
+
+If you want a single command that installs dependencies (`PostgreSQL`, `Redis`, `curl`, `openssl`, etc.) and finishes setup automatically (no Setup Wizard), use:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/one-click-deploy.sh | bash
+```
+
+Optional example:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/one-click-deploy.sh | \
+  bash -s -- --server-port 8080 --admin-email admin@example.com --admin-password 'StrongPassword'
+```
+
+The script will:
+1. Detect Ubuntu/Debian and install required packages
+2. Configure local PostgreSQL + Redis with generated strong credentials
+3. Install Sub2API binary + systemd service via `deploy/install.sh`
+4. Enable AUTO_SETUP and bootstrap admin/user config
+5. Run health checks and write credentials to `/etc/sub2api/.install-credentials` (root-only)
+
 #### Prerequisites
 
 - Linux server (amd64 or arm64)
@@ -518,6 +540,7 @@ sub2api/
     ├── docker-compose.yml    # Docker Compose configuration
     ├── .env.example          # Environment variables for Docker Compose
     ├── config.example.yaml   # Full config file for binary deployment
+    ├── one-click-deploy.sh   # One-click binary deployment (auto dependencies)
     └── install.sh            # One-click installation script
 ```
 

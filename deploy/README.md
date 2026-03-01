@@ -18,6 +18,7 @@ This directory contains files for deploying Sub2API on Linux servers.
 | `docker-compose.infra.local.yml` | Docker Compose configuration (infra-first: PostgreSQL + Redis 7+, optional Sub2API) |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
 | `infra-deploy.sh` | Infrastructure-first deployment script (PG + Redis 7+, optional full stack) |
+| `one-click-deploy.sh` | One-click binary deployment script (Ubuntu/Debian, auto dependencies + auto setup) |
 | `.env.example` | Docker environment variables template |
 | `.env.infra.example` | Infra-first environment template |
 | `DOCKER.md` | Docker Hub documentation |
@@ -401,6 +402,26 @@ GEMINI_OAUTH_CLIENT_SECRET=GOCSPX-your-client-secret
 ## Binary Installation
 
 For production servers using systemd.
+
+### One-Click Auto Deployment (Ubuntu/Debian)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/one-click-deploy.sh | bash
+```
+
+What it automates:
+- Installs dependencies (`curl`, `openssl`, `postgresql`, `redis-server`, etc.)
+- Provisions local PostgreSQL + Redis with generated secure passwords
+- Installs Sub2API binary/service via `install.sh`
+- Writes systemd AUTO_SETUP drop-in and completes first-time initialization automatically
+- Saves generated credentials to `/etc/sub2api/.install-credentials` (root-only)
+
+Optional arguments:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/one-click-deploy.sh | \
+  bash -s -- --server-host 0.0.0.0 --server-port 8080 --admin-email admin@example.com --admin-password 'StrongPassword'
+```
 
 ### One-Line Installation
 

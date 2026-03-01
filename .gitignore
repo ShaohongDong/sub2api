@@ -103,6 +103,10 @@ backend/internal/web/dist/*
 
 # 后端运行时缓存数据
 backend/data/
+# 本地部署运行时数据（docker compose / 一键脚本生成）
+data/
+postgres_data/
+redis_data/
 
 # ===================
 # 本地配置文件（包含敏感信息）
@@ -132,4 +136,3 @@ docs/*
 frontend/coverage/
 aicodex
 output/
-
