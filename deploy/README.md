@@ -19,6 +19,7 @@ This directory contains files for deploying Sub2API on Linux servers.
 | `.env.example` | Docker environment variables template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |
+| `install-deps.sh` | One-click PostgreSQL/Redis dependency installer for Ubuntu/Debian |
 | `install-datamanagementd.sh` | datamanagementd 一键安装脚本 |
 | `sub2api.service` | Systemd service unit file |
 | `sub2api-datamanagementd.service` | datamanagementd systemd service unit file |
@@ -350,6 +351,40 @@ GEMINI_OAUTH_CLIENT_SECRET=GOCSPX-your-client-secret
 
 For production servers using systemd.
 
+### Auto-Deploy PostgreSQL and Redis (Ubuntu/Debian)
+
+Before installing the Sub2API binary, you can auto-install and initialize dependencies:
+
+```bash
+# Run directly from GitHub
+curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install-deps.sh | sudo bash
+
+# Or run locally after cloning
+cd deploy
+sudo ./install-deps.sh
+```
+
+Useful options:
+
+```bash
+sudo ./install-deps.sh \
+  --db-name sub2api \
+  --db-user sub2api \
+  --output-env-file /etc/sub2api/deps.env
+```
+
+What this script does:
+- Installs PostgreSQL >= 14 (system repo first, falls back to PGDG if needed)
+- Installs Redis >= 6
+- Creates/updates the database user and database
+- Enables Redis `requirepass` with a generated (or provided) password
+- Writes connection values to `/etc/sub2api/deps.env` (permission `600`)
+
+Recommended binary deployment order:
+1. `sudo ./install-deps.sh`
+2. `sudo ./install.sh`
+3. Open Setup Wizard and fill DB/Redis values from `/etc/sub2api/deps.env`
+
 ### One-Line Installation
 
 ```bash
@@ -465,10 +500,12 @@ The main config file is at `/etc/sub2api/config.yaml` (created by Setup Wizard).
 
 ### Prerequisites
 
-- Linux server (Ubuntu 20.04+, Debian 11+, CentOS 8+, etc.)
+- Linux server with systemd (recommended: Ubuntu 20.04+ or Debian 11+)
 - PostgreSQL 14+
 - Redis 6+
 - systemd
+
+> Note: `install-deps.sh` currently supports Ubuntu/Debian only.
 
 ### Directory Structure
 
