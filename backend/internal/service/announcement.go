@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/domain"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/ShaohongDong/sub2api/internal/domain"
+	"github.com/ShaohongDong/sub2api/internal/pkg/pagination"
 )
 
 const (

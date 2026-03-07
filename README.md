@@ -30,6 +30,8 @@ Demo credentials (shared demo environment; **not** created automatically for sel
 
 Sub2API is an AI API gateway platform designed to distribute and manage API quotas from AI product subscriptions (like Claude Code $200/month). Users can access upstream AI services through platform-generated API Keys, while the platform handles authentication, billing, load balancing, and request forwarding.
 
+The canonical project repository is `ShaohongDong/sub2api`. Release checks, install scripts, and deployment examples in this repository all point to that address.
+
 ## Features
 
 - **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key)
@@ -74,7 +76,7 @@ One-click installation script that downloads pre-built binaries from GitHub Rele
 #### Installation Steps
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/ShaohongDong/sub2api/main/deploy/install.sh | sudo bash
 ```
 
 The script will:
@@ -124,7 +126,7 @@ sudo journalctl -u sub2api -f
 sudo systemctl restart sub2api
 
 # Uninstall
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash -s -- uninstall -y
+curl -sSL https://raw.githubusercontent.com/ShaohongDong/sub2api/main/deploy/install.sh | sudo bash -s -- uninstall -y
 ```
 
 ---
@@ -147,7 +149,7 @@ Use the automated deployment script for easy setup:
 mkdir -p sub2api-deploy && cd sub2api-deploy
 
 # Download and run deployment preparation script
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/docker-deploy.sh | bash
+curl -sSL https://raw.githubusercontent.com/ShaohongDong/sub2api/main/deploy/docker-deploy.sh | bash
 
 # Start services
 docker-compose -f docker-compose.local.yml up -d
@@ -169,7 +171,7 @@ If you prefer manual setup:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/ShaohongDong/sub2api.git
 cd sub2api/deploy
 
 # 2. Copy environment configuration
@@ -198,6 +200,12 @@ ADMIN_PASSWORD=your_admin_password
 # Optional: Custom port
 SERVER_PORT=8080
 ```
+
+You can manually specify the initial admin login in `.env` before the first startup:
+
+- `ADMIN_EMAIL` sets the admin email address. If omitted, Docker Compose uses `admin@sub2api.local`.
+- `ADMIN_PASSWORD` sets the admin password. If left empty, the system auto-generates a password and prints it in the container logs on first startup.
+- These variables are used for the initial admin account creation during `AUTO_SETUP=true`, so set them before running `docker-compose up` for the first time.
 
 **Generate secure secrets:**
 ```bash
@@ -242,7 +250,9 @@ docker-compose -f docker-compose.local.yml logs -f sub2api
 
 Open `http://YOUR_SERVER_IP:8080` in your browser.
 
-If admin password was auto-generated, find it in logs:
+If you manually set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env` before first startup, log in with those credentials directly.
+
+If `ADMIN_PASSWORD` was left empty and auto-generated, find it in logs:
 ```bash
 docker-compose -f docker-compose.local.yml logs sub2api | grep "admin password"
 ```
@@ -308,7 +318,7 @@ Build and run from source code for development or customization.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/ShaohongDong/sub2api.git
 cd sub2api
 
 # 2. Install pnpm (if not already installed)

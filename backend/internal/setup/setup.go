@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/repository"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/ShaohongDong/sub2api/internal/pkg/logger"
+	"github.com/ShaohongDong/sub2api/internal/repository"
+	"github.com/ShaohongDong/sub2api/internal/service"
 
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"

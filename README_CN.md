@@ -30,6 +30,8 @@
 
 Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅（如 Claude Code $200/月）的 API 配额。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、计费、负载均衡和请求转发。
 
+当前项目主仓库为 `ShaohongDong/sub2api`，本仓库中的发布检测、安装脚本和部署示例均以该地址为准。
+
 ## 核心功能
 
 - **多账号管理** - 支持多种上游账号类型（OAuth、API Key）
@@ -78,7 +80,7 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅（
 #### 安装步骤
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/ShaohongDong/sub2api/main/deploy/install.sh | sudo bash
 ```
 
 脚本会自动：
@@ -128,7 +130,7 @@ sudo journalctl -u sub2api -f
 sudo systemctl restart sub2api
 
 # 卸载
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash -s -- uninstall -y
+curl -sSL https://raw.githubusercontent.com/ShaohongDong/sub2api/main/deploy/install.sh | sudo bash -s -- uninstall -y
 ```
 
 ---
@@ -151,7 +153,7 @@ curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install
 mkdir -p sub2api-deploy && cd sub2api-deploy
 
 # 下载并运行部署准备脚本
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/docker-deploy.sh | bash
+curl -sSL https://raw.githubusercontent.com/ShaohongDong/sub2api/main/deploy/docker-deploy.sh | bash
 
 # 启动服务
 docker-compose -f docker-compose.local.yml up -d
@@ -173,7 +175,7 @@ docker-compose -f docker-compose.local.yml logs -f sub2api
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/ShaohongDong/sub2api.git
 cd sub2api/deploy
 
 # 2. 复制环境配置文件
@@ -324,7 +326,7 @@ rm -rf data/ postgres_data/ redis_data/
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/ShaohongDong/sub2api.git
 cd sub2api
 
 # 2. 安装 pnpm（如果还没有安装）

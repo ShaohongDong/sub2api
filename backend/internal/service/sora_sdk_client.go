@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/DouDOU-start/go-sora2api/sora"
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	openaioauth "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
+	"github.com/ShaohongDong/sub2api/internal/config"
+	"github.com/ShaohongDong/sub2api/internal/pkg/logger"
+	openaioauth "github.com/ShaohongDong/sub2api/internal/pkg/openai"
+	"github.com/ShaohongDong/sub2api/internal/util/logredact"
 	"github.com/tidwall/gjson"
 )
 

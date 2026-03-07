@@ -6,8 +6,7 @@
 
 | 项目 | 说明 |
 |------|------|
-| **上游仓库** | Wei-Shaw/sub2api |
-| **Fork 仓库** | bayma888/sub2api-bmai |
+| **项目仓库** | ShaohongDong/sub2api |
 | **技术栈** | Go 后端 (Ent ORM + Gin) + Vue3 前端 (pnpm) |
 | **数据库** | PostgreSQL 16 + Redis |
 | **包管理** | 后端: go modules, 前端: **pnpm**（不是 npm） |
@@ -264,18 +263,17 @@ psql -U sub2api -h 127.0.0.1 -d sub2api -f migration.sql
 ### Git 操作
 
 ```bash
-# 同步上游
-git fetch upstream
+# 同步远端主分支
+git fetch origin
 git checkout main
-git merge upstream/main
-git push origin main
+git pull --ff-only origin main
 
 # 创建功能分支
 git checkout -b feature/xxx
 
 # Rebase 到最新 main
-git fetch upstream
-git rebase upstream/main
+git fetch origin
+git rebase origin/main
 ```
 
 ### 前端操作
@@ -313,7 +311,7 @@ golangci-lint run ./...
 ## 六、项目结构速览
 
 ```
-sub2api-bmai/
+sub2api/
 ├── backend/
 │   ├── cmd/server/          # 主程序入口
 │   ├── ent/                 # Ent ORM 生成代码
@@ -340,7 +338,7 @@ sub2api-bmai/
 
 ## 七、参考资源
 
-- [上游仓库](https://github.com/Wei-Shaw/sub2api)
+- [项目仓库](https://github.com/ShaohongDong/sub2api)
 - [Ent 文档](https://entgo.io/docs/getting-started)
 - [Vue3 文档](https://vuejs.org/)
 - [pnpm 文档](https://pnpm.io/)

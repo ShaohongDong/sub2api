@@ -11,10 +11,10 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/Wei-Shaw/sub2api/ent/apikey"
-	"github.com/Wei-Shaw/sub2api/ent/group"
-	"github.com/Wei-Shaw/sub2api/ent/usagelog"
-	"github.com/Wei-Shaw/sub2api/ent/user"
+	"github.com/ShaohongDong/sub2api/ent/apikey"
+	"github.com/ShaohongDong/sub2api/ent/group"
+	"github.com/ShaohongDong/sub2api/ent/usagelog"
+	"github.com/ShaohongDong/sub2api/ent/user"
 )
 
 // APIKeyCreate is the builder for creating a APIKey entity.
