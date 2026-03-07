@@ -5,6 +5,7 @@ Caddy Deployment Script
 """
 
 import argparse
+import csv
 import json
 import logging
 import os
@@ -80,6 +81,194 @@ class CaddyDeployer:
             if caddy_in_path:
                 return Path(caddy_in_path)
             return Path.cwd() / "caddy"
+
+    def _normalize_path(self, path: Optional[str]) -> str:
+        """规范化路径，便于跨平台比较"""
+        if not path:
+            return ""
+        cleaned = path.strip().strip('"').strip("'")
+        return os.path.normcase(os.path.normpath(cleaned))
+
+    def _strip_scheme(self, address: str) -> str:
+        """移除地址中的协议前缀"""
+        if '://' not in address:
+            return address
+        parsed = urllib.parse.urlparse(address)
+        return parsed.netloc or parsed.path
+
+    def _is_local_domain(self, domain: str) -> bool:
+        """判断是否为本地开发地址"""
+        normalized = self._strip_scheme(domain)
+        host = normalized.split(':', 1)[0]
+        return host in ['localhost', '0.0.0.0'] or host.startswith('127.')
+
+    def _format_site_address(self, domain: str, enable_ssl: bool) -> str:
+        """根据SSL设置格式化站点地址"""
+        normalized = self._strip_scheme(domain)
+        scheme = 'https' if enable_ssl else 'http'
+        return f"{scheme}://{normalized}"
+
+    def _read_pid_file(self) -> Optional[int]:
+        """读取PID文件中的进程ID"""
+        try:
+            if not self.pid_file.exists():
+                return None
+            with open(self.pid_file, 'r', encoding='utf-8') as f:
+                return int(f.read().strip())
+        except Exception:
+            return None
+
+    def _remove_pid_file(self) -> None:
+        """删除PID文件"""
+        self.pid_file.unlink(missing_ok=True)
+
+    def _get_process_info(self, pid: int) -> Optional[Dict[str, str]]:
+        """获取进程的可执行文件和命令行信息"""
+        try:
+            if self.system == 'windows':
+                command = (
+                    f'$p = Get-CimInstance Win32_Process -Filter "ProcessId = {pid}" '
+                    '-ErrorAction SilentlyContinue; '
+                    'if ($p) { '
+                    '$p | Select-Object ExecutablePath, CommandLine, Name | '
+                    'ConvertTo-Json -Compress }'
+                )
+                result = subprocess.run(
+                    ['powershell', '-NoProfile', '-Command', command],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode != 0 or not result.stdout.strip():
+                    return None
+
+                data = json.loads(result.stdout)
+                return {
+                    'pid': str(pid),
+                    'name': data.get('Name') or '',
+                    'executable_path': data.get('ExecutablePath') or '',
+                    'command_line': data.get('CommandLine') or ''
+                }
+
+            proc_dir = Path('/proc') / str(pid)
+            executable_path = ''
+            command_line = ''
+            name = ''
+
+            try:
+                executable_path = os.readlink(proc_dir / 'exe')
+            except Exception:
+                executable_path = ''
+
+            try:
+                cmdline_path = proc_dir / 'cmdline'
+                command_line = cmdline_path.read_text(encoding='utf-8', errors='ignore').replace('\x00', ' ').strip()
+            except Exception:
+                command_line = ''
+
+            if not command_line:
+                result = subprocess.run(
+                    ['ps', '-p', str(pid), '-o', 'command='],
+                    capture_output=True,
+                    text=True
+                )
+                command_line = result.stdout.strip()
+
+            result = subprocess.run(
+                ['ps', '-p', str(pid), '-o', 'comm='],
+                capture_output=True,
+                text=True
+            )
+            name = result.stdout.strip()
+
+            if not executable_path and not command_line and not name:
+                return None
+
+            return {
+                'pid': str(pid),
+                'name': name,
+                'executable_path': executable_path,
+                'command_line': command_line
+            }
+        except Exception:
+            return None
+
+    def _is_caddy_process(self, process_info: Optional[Dict[str, str]]) -> bool:
+        """判断进程是否为Caddy"""
+        if not process_info:
+            return False
+
+        expected_path = self._normalize_path(str(self.caddy_path))
+        executable_path = self._normalize_path(process_info.get('executable_path'))
+        name = (process_info.get('name') or '').lower()
+        command_line = process_info.get('command_line') or ''
+
+        if executable_path and executable_path == expected_path:
+            return True
+
+        binary_names = {'caddy', 'caddy.exe'}
+        if Path(name).name in binary_names:
+            if not executable_path:
+                return True
+            return executable_path.endswith(os.path.normcase('caddy')) or executable_path.endswith(os.path.normcase('caddy.exe'))
+
+        normalized_command = self._normalize_path(command_line)
+        return bool(expected_path and expected_path in normalized_command)
+
+    def _matches_managed_process(self, process_info: Optional[Dict[str, str]]) -> bool:
+        """判断进程是否为当前工具启动的受管Caddy实例"""
+        if not self._is_caddy_process(process_info):
+            return False
+
+        command_line = process_info.get('command_line') or ''
+        managed_markers = [
+            ('--config', str(self.config_file)),
+            ('--pidfile', str(self.pid_file))
+        ]
+        return any(flag in command_line and marker in command_line for flag, marker in managed_markers)
+
+    def _get_managed_pid(self, remove_stale: bool = True) -> Optional[int]:
+        """返回当前工具管理的Caddy进程PID"""
+        pid = self._read_pid_file()
+        if pid is None:
+            return None
+
+        process_info = self._get_process_info(pid)
+        if self._matches_managed_process(process_info):
+            return pid
+
+        if remove_stale:
+            self.logger.warning(f"检测到无效或过期的PID文件，忽略 PID {pid}")
+            self._remove_pid_file()
+        return None
+
+    def _terminate_process(self, pid: int) -> bool:
+        """终止指定PID的进程"""
+        try:
+            if self.system == 'windows':
+                result = subprocess.run(
+                    ['taskkill', '/F', '/T', '/PID', str(pid)],
+                    capture_output=True,
+                    text=True
+                )
+                return result.returncode == 0
+
+            try:
+                os.kill(pid, 15)  # SIGTERM
+            except ProcessLookupError:
+                return True
+
+            time.sleep(2)
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return True
+
+            os.kill(pid, 9)  # SIGKILL
+            return True
+        except ProcessLookupError:
+            return True
+        except Exception:
+            return False
             
     def check_dependencies(self) -> bool:
         """检查系统依赖"""
@@ -163,7 +352,7 @@ class CaddyDeployer:
             self.logger.error(f"Caddy安装失败: {e}")
             return False
             
-    def generate_config(self, domain: str, backend_port: int, 
+    def generate_config(self, domain: str, backend_port: Optional[int], 
                        backend_host: str = "127.0.0.1",
                        enable_ssl: bool = False,
                        custom_config: Optional[str] = None) -> bool:
@@ -176,16 +365,20 @@ class CaddyDeployer:
                 config_content = custom_config
             else:
                 # 生成标准配置
-                # 检查是否为本地开发环境（localhost、127.x.x.x、带本地端口的域名）
-                is_local = (
-                    domain.startswith("localhost") or 
-                    domain.startswith("127.") or 
-                    domain.startswith("0.0.0.0") or
-                    (":" in domain and (domain.split(":")[0] in ["localhost", "127.0.0.1", "0.0.0.0"]))
-                )
-                if is_local:
-                    # 本地开发配置
-                    config_content = f"""{domain} {{
+                is_local = self._is_local_domain(domain)
+                site_address = self._format_site_address(domain, enable_ssl)
+                x_frame_options = "SAMEORIGIN" if is_local else "DENY"
+                hsts_header = ""
+                if enable_ssl:
+                    hsts_header = '        Strict-Transport-Security "max-age=31536000; includeSubDomains"\n'
+
+                tls_block = ""
+                if enable_ssl and is_local:
+                    tls_block = "\n    tls internal"
+
+                roll_keep = 3 if is_local else 5
+
+                config_content = f"""{site_address} {{
     reverse_proxy {backend_host}:{backend_port} {{
         # 支持流式响应（SSE）
         flush_interval -1
@@ -200,84 +393,19 @@ class CaddyDeployer:
 
     # 安全头部
     header {{
-        X-Frame-Options "SAMEORIGIN"
-        X-Content-Type-Options "nosniff"
-        -Server
-    }}
-    
-    # 访问日志
-    log {{
-        output file {self.config_dir}/access.log {{
-            roll_size 100mb
-            roll_keep 3
-        }}
-    }}
-}}"""
-                else:
-                    # 生产环境配置
-                    # 判断是否为HTTP（非HTTPS）配置
-                    is_http_only = ":80" in domain or domain == ":80"
-                    
-                    if is_http_only:
-                        # HTTP配置，不添加HSTS头部
-                        config_content = f"""{domain} {{
-    reverse_proxy {backend_host}:{backend_port} {{
-        # 支持流式响应（SSE）
-        flush_interval -1
-
-        # 超时设置
-        transport http {{
-            read_timeout 300s
-            write_timeout 300s
-            dial_timeout 30s
-        }}
-    }}
-
-    # 安全头部（不包含HSTS）
-    header {{
-        X-Frame-Options "DENY"
+{hsts_header}        X-Frame-Options "{x_frame_options}"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         -Server
     }}
-    
+
+{tls_block}
+
     # 访问日志
     log {{
         output file {self.config_dir}/access.log {{
             roll_size 100mb
-            roll_keep 5
-        }}
-    }}
-}}"""
-                    else:
-                        # HTTPS配置，包含HSTS
-                        config_content = f"""{domain} {{
-    reverse_proxy {backend_host}:{backend_port} {{
-        # 支持流式响应（SSE）
-        flush_interval -1
-
-        # 超时设置
-        transport http {{
-            read_timeout 300s
-            write_timeout 300s
-            dial_timeout 30s
-        }}
-    }}
-
-    # 安全头部
-    header {{
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Frame-Options "DENY"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        -Server
-    }}
-    
-    # 访问日志
-    log {{
-        output file {self.config_dir}/access.log {{
-            roll_size 100mb
-            roll_keep 5
+            roll_keep {roll_keep}
         }}
     }}
 }}"""
@@ -330,17 +458,31 @@ class CaddyDeployer:
                     self.logger.warning(f"  管理端口 2019 被占用: {conflicts['admin_port']}")
                 for port_conflict in conflicts['listening_ports']:
                     self.logger.warning(f"  端口 {port_conflict['port']} 被占用: {port_conflict['process']}")
-                    
-                # 检查是否是Caddy进程占用了端口
-                caddy_processes = self._get_running_caddy_processes()
-                if caddy_processes:
-                    self.logger.info(f"检测到 {len(caddy_processes)} 个Caddy进程正在运行，将停止它们")
-                    self._cleanup_caddy_processes()
+
+                managed_pid = self._get_managed_pid()
+                if managed_pid is not None:
+                    self.logger.info(f"检测到受管Caddy实例正在运行 (PID: {managed_pid})，先停止后重新部署")
+                    if not self.undeploy():
+                        return False
                     time.sleep(2)
+
+                    conflicts = self._check_port_conflicts()
+                    if conflicts['admin_port'] or conflicts['listening_ports']:
+                        self.logger.error("停止受管实例后端口仍被占用，请手动处理冲突后重试")
+                        return False
                 else:
-                    self.logger.warning("端口被非Caddy进程占用")
-                    self.logger.info("建议停止占用端口的进程或修改配置")
-                    self.logger.info("尝试继续部署...")
+                    caddy_processes = self._get_running_caddy_processes()
+                    if caddy_processes:
+                        self.logger.warning("检测到非受管Caddy进程占用端口，已停止自动清理以避免误杀:")
+                        for process in caddy_processes:
+                            self.logger.warning(
+                                f"  PID {process['pid']} ({process['name']}): {process.get('command_line') or 'unknown'}"
+                            )
+                    else:
+                        self.logger.warning("检测到非Caddy进程占用所需端口")
+
+                    self.logger.info("请停止冲突进程或调整监听端口后重试部署")
+                    return False
             
             # 检查是否已经运行
             if self.is_running():
@@ -413,34 +555,17 @@ class CaddyDeployer:
         try:
             self.logger.info("停止Caddy服务...")
             
-            if not self.is_running():
+            managed_pid = self._get_managed_pid()
+            if managed_pid is None:
                 self.logger.info("Caddy服务未运行")
                 return True
-                
-            # 读取PID
-            if self.pid_file.exists():
-                with open(self.pid_file, 'r') as f:
-                    pid = int(f.read().strip())
-                    
-                self.logger.info(f"终止进程 PID: {pid}")
-                
-                # 发送终止信号
-                if self.system == 'windows':
-                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], 
-                                 capture_output=True)
-                else:
-                    try:
-                        os.kill(pid, 15)  # SIGTERM
-                        time.sleep(2)
-                        os.kill(pid, 9)   # SIGKILL
-                    except ProcessLookupError:
-                        pass
-                        
-                # 删除PID文件
-                self.pid_file.unlink(missing_ok=True)
-                
-            # 额外检查并清理可能的残留进程
-            self._cleanup_caddy_processes()
+
+            self.logger.info(f"终止受管进程 PID: {managed_pid}")
+            if not self._terminate_process(managed_pid):
+                self.logger.error(f"终止受管进程失败: {managed_pid}")
+                return False
+
+            self._remove_pid_file()
             
             self.logger.info("Caddy服务停止成功")
             return True
@@ -451,96 +576,68 @@ class CaddyDeployer:
             
     def _cleanup_caddy_processes(self):
         """清理Caddy进程"""
-        try:
-            if self.system == 'windows':
-                # Windows
-                result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq caddy.exe'],
-                                      capture_output=True, text=True)
-                if 'caddy.exe' in result.stdout:
-                    subprocess.run(['taskkill', '/F', '/IM', 'caddy.exe'],
-                                 capture_output=True)
-            else:
-                # Unix
-                subprocess.run(['pkill', '-f', 'caddy'], capture_output=True)
-        except Exception:
-            pass
+        managed_pid = self._get_managed_pid()
+        if managed_pid is None:
+            return False
+        return self._terminate_process(managed_pid)
             
     def is_running(self) -> bool:
         """检查Caddy服务是否运行"""
-        # 首先检查PID文件对应的进程
-        pid_running = self._check_pid_file_process()
-        if pid_running:
-            return True
-            
-        # 如果PID文件进程不运行，检查是否有任何Caddy进程在运行
-        return self._check_any_caddy_process()
+        return self._check_pid_file_process()
         
     def _check_pid_file_process(self) -> bool:
         """检查PID文件中的进程是否运行"""
-        try:
-            if not self.pid_file.exists():
-                return False
-                
-            with open(self.pid_file, 'r') as f:
-                pid = int(f.read().strip())
-                
-            if self.system == 'windows':
-                result = subprocess.run(['tasklist', '/FI', f'PID eq {pid}'],
-                                      capture_output=True, text=True)
-                return str(pid) in result.stdout
-            else:
-                try:
-                    os.kill(pid, 0)
-                    return True
-                except ProcessLookupError:
-                    return False
-                    
-        except Exception:
-            return False
+        return self._get_managed_pid() is not None
             
     def _check_any_caddy_process(self) -> bool:
         """检查是否有任何Caddy进程在运行"""
-        try:
-            if self.system == 'windows':
-                result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq caddy.exe'],
-                                      capture_output=True, text=True)
-                return 'caddy.exe' in result.stdout
-            else:
-                # 使用pgrep检查Caddy进程，只查找实际的caddy可执行文件
-                result = subprocess.run(['pgrep', '-f', '^.*caddy\\s+(run|start)'], 
-                                      capture_output=True, text=True)
-                return result.returncode == 0 and result.stdout.strip()
-        except Exception:
-            return False
+        return bool(self._get_running_caddy_processes())
             
     def _get_running_caddy_processes(self) -> List[Dict]:
         """获取所有运行中的Caddy进程信息"""
         processes = []
         try:
             if self.system == 'windows':
-                result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq caddy.exe', '/FO', 'CSV'],
-                                      capture_output=True, text=True)
-                lines = result.stdout.strip().split('\n')
-                if len(lines) > 1:  # 跳过标题行
-                    for line in lines[1:]:
-                        if 'caddy.exe' in line:
-                            parts = line.split(',')
-                            if len(parts) >= 2:
-                                processes.append({
-                                    'name': parts[0].strip('"'),
-                                    'pid': parts[1].strip('"')
-                                })
+                result = subprocess.run(
+                    ['tasklist', '/FI', 'IMAGENAME eq caddy.exe', '/FO', 'CSV'],
+                    capture_output=True,
+                    text=True
+                )
+                reader = csv.reader(result.stdout.splitlines())
+                next(reader, None)
+                for row in reader:
+                    if len(row) < 2:
+                        continue
+                    pid = row[1].strip()
+                    if not pid.isdigit():
+                        continue
+                    process_info = self._get_process_info(int(pid))
+                    if not self._is_caddy_process(process_info):
+                        continue
+                    processes.append({
+                        'name': process_info.get('name') or row[0].strip(),
+                        'pid': pid,
+                        'command_line': process_info.get('command_line') or '',
+                        'managed': self._matches_managed_process(process_info)
+                    })
             else:
-                # 只查找实际的caddy可执行文件，不包括脚本
-                result = subprocess.run(['pgrep', '-f', '^.*caddy\\s+(run|start)'], 
-                                      capture_output=True, text=True)
+                result = subprocess.run(
+                    ['pgrep', '-x', 'caddy'],
+                    capture_output=True,
+                    text=True
+                )
                 if result.returncode == 0:
                     pids = result.stdout.strip().split('\n')
                     for pid in pids:
-                        if pid:
+                        if pid and pid.isdigit():
+                            process_info = self._get_process_info(int(pid))
+                            if not self._is_caddy_process(process_info):
+                                continue
                             processes.append({
-                                'name': 'caddy',
-                                'pid': pid.strip()
+                                'name': process_info.get('name') or 'caddy',
+                                'pid': pid.strip(),
+                                'command_line': process_info.get('command_line') or '',
+                                'managed': self._matches_managed_process(process_info)
                             })
         except Exception:
             pass
@@ -655,7 +752,8 @@ class CaddyDeployer:
             
     def status(self) -> Dict:
         """获取服务状态"""
-        running = self.is_running()
+        managed_pid = self._get_managed_pid()
+        running = managed_pid is not None
         status_info = {
             'running': running,
             'caddy_path': str(self.caddy_path),
@@ -664,12 +762,8 @@ class CaddyDeployer:
             'log_file': str(self.log_file)
         }
         
-        if running and self.pid_file.exists():
-            try:
-                with open(self.pid_file, 'r') as f:
-                    status_info['pid'] = int(f.read().strip())
-            except Exception:
-                pass
+        if running:
+            status_info['pid'] = managed_pid
                 
         return status_info
         
@@ -1001,21 +1095,36 @@ class CaddyDeployer:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                     
-                # 简单解析端口
                 import re
-                # 匹配 domain:port 格式
-                port_patterns = re.findall(r':([0-9]+)\s*{', content)
-                for port in port_patterns:
-                    ports.append(int(port))
-                    
-                # 如果没有明确端口，默认检查80和443
+                site_addresses = re.findall(r'^([^\s{]+)\s*{', content, re.MULTILINE)
+
+                for address in site_addresses:
+                    address = address.strip()
+                    if not address:
+                        continue
+
+                    if address.startswith(':'):
+                        port_part = address[1:]
+                        if port_part.isdigit():
+                            ports.append(int(port_part))
+                        continue
+
+                    if '://' in address:
+                        parsed = urllib.parse.urlparse(address)
+                        if parsed.port:
+                            ports.append(parsed.port)
+                        elif parsed.scheme == 'https':
+                            ports.append(443)
+                        else:
+                            ports.append(80)
+                        continue
+
+                    host, separator, port_part = address.rpartition(':')
+                    if separator and host and port_part.isdigit():
+                        ports.append(int(port_part))
+
                 if not ports:
-                    # 检查是否包含本地地址
-                    is_local_config = (
-                        'localhost' in content or 
-                        '127.0.0.1' in content or 
-                        '0.0.0.0' in content
-                    )
+                    is_local_config = any(token in content for token in ['localhost', '127.0.0.1', '0.0.0.0'])
                     if is_local_config:
                         ports = [80]
                     else:
@@ -1042,6 +1151,8 @@ class CaddyDeployer:
                     if domain.startswith(':'):
                         # :80 格式
                         endpoints.append(f'http://localhost{domain}')
+                    elif domain.startswith('http://') or domain.startswith('https://'):
+                        endpoints.append(domain)
                     elif ':' in domain and not domain.startswith('http'):
                         # example.com:8080 格式
                         if domain.startswith('localhost') or '127.0.0.1' in domain:
@@ -1324,9 +1435,8 @@ class CaddyDeployer:
             
         return diagnosis
 
-
-def main():
-    """主函数"""
+def build_parser() -> Tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
+    """构建命令行解析器"""
     parser = argparse.ArgumentParser(
         description="Caddy部署脚本 - 完整的Caddy服务管理工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1370,8 +1480,8 @@ def main():
     deploy_parser = subparsers.add_parser('deploy', help='部署Caddy服务')
     deploy_parser.add_argument('--domain', '-d', default='localhost:80',
                               help='服务域名或地址 (默认: localhost:80)')
-    deploy_parser.add_argument('--port', '-p', type=int, required=True,
-                              help='后端服务端口')
+    deploy_parser.add_argument('--port', '-p', type=int,
+                              help='后端服务端口；未使用 --config 时必填')
     deploy_parser.add_argument('--backend-host', default='127.0.0.1',
                               help='后端服务地址 (默认: 127.0.0.1)')
     deploy_parser.add_argument('--ssl', action='store_true',
@@ -1412,12 +1522,29 @@ def main():
     install_parser = subparsers.add_parser('install', help='安装Caddy')
     install_parser.add_argument('--force', action='store_true',
                                help='强制重新安装')
-    
+
+    return parser, deploy_parser
+
+
+def validate_deploy_args(args: argparse.Namespace, deploy_parser: argparse.ArgumentParser) -> None:
+    """校验deploy子命令参数"""
+    if args.command != 'deploy':
+        return
+
+    if not args.config and args.port is None:
+        deploy_parser.error("--port is required unless --config is provided")
+
+
+def main():
+    """主函数"""
+    parser, deploy_parser = build_parser()
     args = parser.parse_args()
     
     if not args.command:
         parser.print_help()
         return 1
+
+    validate_deploy_args(args, deploy_parser)
     
     # 创建部署器实例
     deployer = CaddyDeployer()

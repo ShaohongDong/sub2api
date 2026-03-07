@@ -133,3 +133,13 @@ frontend/coverage/
 aicodex
 output/
 
+# ===================
+# Python
+# ===================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+

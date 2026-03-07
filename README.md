@@ -165,6 +165,8 @@ docker-compose -f docker-compose.local.yml logs -f sub2api
 - Creates data directories (uses local directories for easy backup/migration)
 - Displays generated credentials for your reference
 
+The generated Compose file defaults to `ghcr.io/shaohongdong/sub2api:latest`. You can override it with `SUB2API_IMAGE` in `.env` if you need to pin a version or use a mirror.
+
 #### Manual Deployment
 
 If you prefer manual setup:

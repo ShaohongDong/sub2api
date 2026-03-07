@@ -169,6 +169,8 @@ docker-compose -f docker-compose.local.yml logs -f sub2api
 - 创建数据目录（使用本地目录，便于备份和迁移）
 - 显示生成的凭证供你记录
 
+生成的 Compose 文件默认使用 `ghcr.io/shaohongdong/sub2api:latest`。如需固定版本或改用私有镜像源，可在 `.env` 中覆盖 `SUB2API_IMAGE`。
+
 #### 手动部署
 
 如果你希望手动配置：
