@@ -2586,40 +2586,93 @@ func writeOpenAIPassthroughResponseHeaders(dst http.Header, src http.Header, fil
 			dst.Set("Content-Type", v)
 		}
 	}
-	// 透传模式强制放行 x-codex-* 响应头（若上游返回）。
-	// 注意：真实 http.Response.Header 的 key 一般会被 canonicalize；但为了兼容测试/自建响应，
-	// 这里用 EqualFold 做一次大小写不敏感的查找。
-	getCaseInsensitiveValues := func(h http.Header, want string) []string {
-		if h == nil {
-			return nil
-		}
-		for k, vals := range h {
-			if strings.EqualFold(k, want) {
-				return vals
-			}
-		}
-		return nil
+	writeOpenAICodexResponseHeaders(dst, src)
+}
+
+func writeOpenAICodexResponseHeaders(dst http.Header, src http.Header) {
+	if dst == nil || src == nil {
+		return
 	}
 
 	for _, rawKey := range []string{
 		"x-codex-primary-used-percent",
 		"x-codex-primary-reset-after-seconds",
+		"x-codex-primary-reset-at",
 		"x-codex-primary-window-minutes",
 		"x-codex-secondary-used-percent",
 		"x-codex-secondary-reset-after-seconds",
+		"x-codex-secondary-reset-at",
 		"x-codex-secondary-window-minutes",
 		"x-codex-primary-over-secondary-limit-percent",
+		"x-codex-credits-has-credits",
+		"x-codex-credits-unlimited",
+		"x-codex-credits-balance",
+		"x-codex-limit-name",
+		"x-codex-promo-message",
 	} {
-		vals := getCaseInsensitiveValues(src, rawKey)
-		if len(vals) == 0 {
-			continue
-		}
-		key := http.CanonicalHeaderKey(rawKey)
-		dst.Del(key)
-		for _, v := range vals {
-			dst.Add(key, v)
+		copyOpenAIResponseHeaderCaseInsensitive(dst, src, rawKey)
+	}
+
+	synthesizeOpenAICodexResetAtHeader(dst, src, "primary")
+	synthesizeOpenAICodexResetAtHeader(dst, src, "secondary")
+}
+
+func copyOpenAIResponseHeaderCaseInsensitive(dst http.Header, src http.Header, want string) bool {
+	vals := getOpenAIResponseHeaderValuesCaseInsensitive(src, want)
+	if len(vals) == 0 {
+		return false
+	}
+	key := http.CanonicalHeaderKey(want)
+	dst.Del(key)
+	for _, v := range vals {
+		dst.Add(key, v)
+	}
+	return true
+}
+
+func getOpenAIResponseHeaderValuesCaseInsensitive(h http.Header, want string) []string {
+	if h == nil {
+		return nil
+	}
+	for k, vals := range h {
+		if strings.EqualFold(k, want) {
+			return vals
 		}
 	}
+	return nil
+}
+
+func synthesizeOpenAICodexResetAtHeader(dst http.Header, src http.Header, limit string) {
+	if dst == nil || src == nil {
+		return
+	}
+
+	resetAtKey := "x-codex-" + limit + "-reset-at"
+	if copyOpenAIResponseHeaderCaseInsensitive(dst, src, resetAtKey) {
+		return
+	}
+
+	resetAfterVals := getOpenAIResponseHeaderValuesCaseInsensitive(src, "x-codex-"+limit+"-reset-after-seconds")
+	if len(resetAfterVals) == 0 {
+		return
+	}
+
+	resetAfterSeconds, err := strconv.ParseInt(strings.TrimSpace(resetAfterVals[0]), 10, 64)
+	if err != nil {
+		return
+	}
+	if resetAfterSeconds < 0 {
+		resetAfterSeconds = 0
+	}
+
+	baseTime := time.Now().UTC()
+	if dateHeader := strings.TrimSpace(src.Get("Date")); dateHeader != "" {
+		if parsedDate, err := http.ParseTime(dateHeader); err == nil {
+			baseTime = parsedDate.UTC()
+		}
+	}
+
+	dst.Set(resetAtKey, strconv.FormatInt(baseTime.Add(time.Duration(resetAfterSeconds)*time.Second).Unix(), 10))
 }
 
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
@@ -2868,6 +2921,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
+	writeOpenAICodexResponseHeaders(c.Writer.Header(), resp.Header)
 
 	// Set SSE response headers
 	c.Header("Content-Type", "text/event-stream")
@@ -3289,6 +3343,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	}
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	writeOpenAICodexResponseHeaders(c.Writer.Header(), resp.Header)
 
 	contentType := "application/json"
 	if s.cfg != nil && !s.cfg.Security.ResponseHeaders.Enabled {
@@ -3339,6 +3394,7 @@ func (s *OpenAIGatewayService) handleOAuthSSEToJSON(resp *http.Response, c *gin.
 	}
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	writeOpenAICodexResponseHeaders(c.Writer.Header(), resp.Header)
 
 	contentType := "application/json; charset=utf-8"
 	if !ok {

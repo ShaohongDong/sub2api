@@ -443,12 +443,14 @@ func TestOpenAIGatewayService_OAuthPassthrough_ResponseHeadersAllowXCodex(t *tes
 
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/json")
+	headers.Set("Date", "Mon, 02 Jan 2006 15:04:05 GMT")
 	headers.Set("x-request-id", "rid")
 	headers.Set("x-codex-primary-used-percent", "12")
 	headers.Set("x-codex-secondary-used-percent", "34")
 	headers.Set("x-codex-primary-window-minutes", "300")
 	headers.Set("x-codex-secondary-window-minutes", "10080")
 	headers.Set("x-codex-primary-reset-after-seconds", "1")
+	headers.Set("x-codex-credits-has-credits", "true")
 
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
@@ -480,6 +482,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_ResponseHeadersAllowXCodex(t *tes
 
 	require.Equal(t, "12", rec.Header().Get("x-codex-primary-used-percent"))
 	require.Equal(t, "34", rec.Header().Get("x-codex-secondary-used-percent"))
+	require.Equal(t, "1136214246", rec.Header().Get("x-codex-primary-reset-at"))
+	require.Equal(t, "true", rec.Header().Get("x-codex-credits-has-credits"))
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_UpstreamErrorIncludesPassthroughFlag(t *testing.T) {

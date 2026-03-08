@@ -1144,6 +1144,60 @@ func TestOpenAIStreamingHeadersOverride(t *testing.T) {
 	}
 }
 
+func TestOpenAIStreamingHeadersAllowXCodexAndSynthesizeResetAt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Security: config.SecurityConfig{
+			ResponseHeaders: config.ResponseHeaderConfig{Enabled: true},
+		},
+		Gateway: config.GatewayConfig{
+			StreamDataIntervalTimeout: 0,
+			StreamKeepaliveInterval:   0,
+			MaxLineSize:               defaultMaxLineSize,
+		},
+	}
+	svc := &OpenAIGatewayService{
+		cfg:                  cfg,
+		responseHeaderFilter: compileResponseHeaderFilter(cfg),
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	pr, pw := io.Pipe()
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       pr,
+		Header: http.Header{
+			"Content-Type":                        []string{"text/event-stream"},
+			"Date":                                []string{"Mon, 02 Jan 2006 15:04:05 GMT"},
+			"X-Codex-Primary-Used-Percent":        []string{"12"},
+			"X-Codex-Primary-Window-Minutes":      []string{"1440"},
+			"X-Codex-Primary-Reset-After-Seconds": []string{"60"},
+			"X-Codex-Secondary-Used-Percent":      []string{"34"},
+			"X-Codex-Secondary-Window-Minutes":    []string{"43200"},
+			"Cf-Ray":                              []string{"filtered"},
+		},
+	}
+
+	go func() {
+		defer func() { _ = pw.Close() }()
+		_, _ = pw.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":2}}}\n\n"))
+	}()
+
+	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "model", "model")
+	_ = pr.Close()
+	require.NoError(t, err)
+
+	require.Equal(t, "12", rec.Header().Get("X-Codex-Primary-Used-Percent"))
+	require.Equal(t, "1440", rec.Header().Get("X-Codex-Primary-Window-Minutes"))
+	require.Equal(t, "1136214305", rec.Header().Get("X-Codex-Primary-Reset-At"))
+	require.Equal(t, "34", rec.Header().Get("X-Codex-Secondary-Used-Percent"))
+	require.Equal(t, "43200", rec.Header().Get("X-Codex-Secondary-Window-Minutes"))
+	require.Empty(t, rec.Header().Get("Cf-Ray"))
+}
+
 func TestOpenAIStreamingReuseScannerBufferAndStillWorks(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
