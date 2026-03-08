@@ -576,7 +576,8 @@ const load = async () => {
   resetAutoRefreshCache()
   pendingTodayStatsRefresh.value = false
   if (isFirstLoad.value) {
-    ;(params as any).lite = '1'
+    const liteParams = params as any
+    liteParams.lite = '1'
   }
   await baseLoad()
   if (isFirstLoad.value) {
