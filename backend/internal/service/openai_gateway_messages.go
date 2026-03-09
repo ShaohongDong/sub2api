@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ShaohongDong/sub2api/internal/pkg/apicompat"
+	"github.com/ShaohongDong/sub2api/internal/pkg/claude"
 	"github.com/ShaohongDong/sub2api/internal/pkg/logger"
 	"github.com/ShaohongDong/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -50,6 +51,11 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	// The client's original preference determines the response format.
 	responsesReq.Stream = true
 	isStream := true
+
+	// 2b. Handle BetaFastMode → service_tier: "priority"
+	if containsBetaToken(c.GetHeader("anthropic-beta"), claude.BetaFastMode) {
+		responsesReq.ServiceTier = "priority"
+	}
 
 	// 3. Model mapping
 	mappedModel := account.GetMappedModel(originalModel)
@@ -102,6 +108,12 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	upstreamReq, err := s.buildUpstreamRequest(ctx, c, account, responsesBody, token, isStream, promptCacheKey, false)
 	if err != nil {
 		return nil, fmt.Errorf("build upstream request: %w", err)
+	}
+
+	// Override session_id with a deterministic UUID derived from the sticky
+	// session key (buildUpstreamRequest may have set it to the raw value).
+	if promptCacheKey != "" {
+		upstreamReq.Header.Set("session_id", generateSessionUUID(promptCacheKey))
 	}
 
 	// 7. Send request
@@ -170,6 +182,18 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	} else {
 		// Client wants JSON: buffer the streaming response and assemble a JSON reply.
 		result, handleErr = s.handleAnthropicBufferedStreamingResponse(resp, c, originalModel, mappedModel, startTime)
+	}
+
+	// Propagate ServiceTier and ReasoningEffort to result for billing
+	if handleErr == nil && result != nil {
+		if responsesReq.ServiceTier != "" {
+			st := responsesReq.ServiceTier
+			result.ServiceTier = &st
+		}
+		if responsesReq.Reasoning != nil && responsesReq.Reasoning.Effort != "" {
+			re := responsesReq.Reasoning.Effort
+			result.ReasoningEffort = &re
+		}
 	}
 
 	// Extract and save Codex usage snapshot from response headers (for OAuth accounts)
