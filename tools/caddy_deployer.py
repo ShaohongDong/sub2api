@@ -379,6 +379,24 @@ class CaddyDeployer:
                 roll_keep = 3 if is_local else 5
 
                 config_content = f"""{site_address} {{
+    # 静态资源长期缓存
+    @static {{
+        path /assets/*
+        path /logo.png
+        path /favicon.ico
+    }}
+    header @static {{
+        Cache-Control "public, max-age=31536000, immutable"
+        -Pragma
+        -Expires
+    }}
+
+    # 响应压缩
+    encode {{
+        zstd
+        gzip 6
+    }}
+
     reverse_proxy {backend_host}:{backend_port} {{
         # 支持流式响应（SSE）
         flush_interval -1

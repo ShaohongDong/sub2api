@@ -63,6 +63,23 @@ class CaddyDeployerTests(unittest.TestCase):
         self.assertIn("Strict-Transport-Security", content)
         self.assertIn("tls internal", content)
 
+    def test_generate_config_enables_compression_and_static_cache(self):
+        deployer = self.make_deployer()
+
+        self.assertTrue(
+            deployer.generate_config(domain="example.com", backend_port=8080, enable_ssl=True)
+        )
+
+        content = deployer.config_file.read_text(encoding="utf-8")
+        self.assertIn("encode {", content)
+        self.assertIn("zstd", content)
+        self.assertIn("gzip 6", content)
+        self.assertIn("@static {", content)
+        self.assertIn('path /assets/*', content)
+        self.assertIn('Cache-Control "public, max-age=31536000, immutable"', content)
+        self.assertIn("-Pragma", content)
+        self.assertIn("-Expires", content)
+
     def test_generate_config_with_custom_config_ignores_port_and_ssl(self):
         deployer = self.make_deployer()
         custom_config = ':9000 { respond "ok" }'
