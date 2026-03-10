@@ -1,8 +1,11 @@
 package service
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/ShaohongDong/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,4 +70,48 @@ func TestGetModelPricing_Gpt54UsesStaticFallbackWhenRemoteMissing(t *testing.T) 
 	require.Equal(t, 272000, got.LongContextInputTokenThreshold)
 	require.InDelta(t, 2.0, got.LongContextInputCostMultiplier, 1e-12)
 	require.InDelta(t, 1.5, got.LongContextOutputCostMultiplier, 1e-12)
+}
+
+func TestResolveWritableDataDir_FallsBackFromDefaultRelativePath(t *testing.T) {
+	workingDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, "data"), []byte("blocked"), 0644))
+
+	previousWD, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(workingDir))
+	t.Cleanup(func() {
+		_ = os.Chdir(previousWD)
+	})
+
+	fallbackRoot := t.TempDir()
+	t.Setenv("DATA_DIR", fallbackRoot)
+
+	svc := &PricingService{
+		cfg: &config.Config{
+			Pricing: config.PricingConfig{
+				DataDir: "./data",
+			},
+		},
+	}
+
+	resolved := svc.resolveWritableDataDir()
+	expected, err := filepath.Abs(fallbackRoot)
+	require.NoError(t, err)
+	require.Equal(t, expected, resolved)
+}
+
+func TestResolveWritableDataDir_UsesExplicitConfiguredPath(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "pricing-cache")
+	svc := &PricingService{
+		cfg: &config.Config{
+			Pricing: config.PricingConfig{
+				DataDir: target,
+			},
+		},
+	}
+
+	resolved := svc.resolveWritableDataDir()
+	expected, err := filepath.Abs(target)
+	require.NoError(t, err)
+	require.Equal(t, expected, resolved)
 }

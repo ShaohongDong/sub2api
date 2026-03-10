@@ -80,6 +80,7 @@ type PricingService struct {
 	pricingData  map[string]*LiteLLMModelPricing
 	lastUpdated  time.Time
 	localHash    string
+	dataDir      string
 
 	// 停止信号
 	stopCh chan struct{}
@@ -99,8 +100,10 @@ func NewPricingService(cfg *config.Config, remoteClient PricingRemoteClient) *Pr
 
 // Initialize 初始化价格服务
 func (s *PricingService) Initialize() error {
+	s.dataDir = s.resolveWritableDataDir()
+
 	// 确保数据目录存在
-	if err := os.MkdirAll(s.cfg.Pricing.DataDir, 0755); err != nil {
+	if err := os.MkdirAll(s.dataDir, 0755); err != nil {
 		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to create data directory: %v", err)
 	}
 
@@ -774,12 +777,88 @@ func (s *PricingService) ForceUpdate() error {
 
 // getPricingFilePath 获取价格文件路径
 func (s *PricingService) getPricingFilePath() string {
-	return filepath.Join(s.cfg.Pricing.DataDir, "model_pricing.json")
+	return filepath.Join(s.getDataDir(), "model_pricing.json")
 }
 
 // getHashFilePath 获取哈希文件路径
 func (s *PricingService) getHashFilePath() string {
-	return filepath.Join(s.cfg.Pricing.DataDir, "model_pricing.sha256")
+	return filepath.Join(s.getDataDir(), "model_pricing.sha256")
+}
+
+func (s *PricingService) getDataDir() string {
+	if strings.TrimSpace(s.dataDir) != "" {
+		return s.dataDir
+	}
+	if s.cfg != nil && strings.TrimSpace(s.cfg.Pricing.DataDir) != "" {
+		return s.cfg.Pricing.DataDir
+	}
+	return "./data"
+}
+
+func (s *PricingService) resolveWritableDataDir() string {
+	configured := "./data"
+	if s.cfg != nil && strings.TrimSpace(s.cfg.Pricing.DataDir) != "" {
+		configured = strings.TrimSpace(s.cfg.Pricing.DataDir)
+	}
+
+	resolved, err := ensureWritableDir(configured)
+	if err == nil {
+		return resolved
+	}
+
+	if !isDefaultPricingDataDir(configured) {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Configured data dir unavailable (%s): %v", configured, err)
+		return configured
+	}
+
+	candidates := []string{}
+	if envDir := strings.TrimSpace(os.Getenv("DATA_DIR")); envDir != "" {
+		candidates = append(candidates, envDir)
+	}
+	candidates = append(candidates, "/app/data", filepath.Join(os.TempDir(), "sub2api-pricing"))
+
+	for _, candidate := range candidates {
+		resolved, candidateErr := ensureWritableDir(candidate)
+		if candidateErr == nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Default data dir %s unavailable, using %s instead: %v", configured, resolved, err)
+			return resolved
+		}
+	}
+
+	logger.LegacyPrintf("service.pricing", "[Pricing] No writable data dir found, keeping %s: %v", configured, err)
+	return configured
+}
+
+func ensureWritableDir(dir string) (string, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return "", fmt.Errorf("empty directory")
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+
+	f, err := os.CreateTemp(dir, ".pricing-write-*")
+	if err != nil {
+		return "", err
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+
+	if absDir, absErr := filepath.Abs(dir); absErr == nil {
+		return absDir, nil
+	}
+	return dir, nil
+}
+
+func isDefaultPricingDataDir(dir string) bool {
+	switch filepath.Clean(strings.TrimSpace(dir)) {
+	case "", ".", "data":
+		return true
+	default:
+		return false
+	}
 }
 
 // isNumeric 检查字符串是否为纯数字
