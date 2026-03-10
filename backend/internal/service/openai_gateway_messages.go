@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ShaohongDong/sub2api/internal/pkg/apicompat"
-	"github.com/ShaohongDong/sub2api/internal/pkg/claude"
 	"github.com/ShaohongDong/sub2api/internal/pkg/logger"
 	"github.com/ShaohongDong/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -52,10 +51,6 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	responsesReq.Stream = true
 	isStream := true
 
-	// 2b. Handle BetaFastMode → service_tier: "priority"
-	if containsBetaToken(c.GetHeader("anthropic-beta"), claude.BetaFastMode) {
-		responsesReq.ServiceTier = "priority"
-	}
 	// 3. Model mapping
 	mappedModel := account.GetMappedModel(originalModel)
 	// 分组级降级：账号未映射时使用分组默认映射模型
