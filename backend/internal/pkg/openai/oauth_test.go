@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"net/url"
 	"sync"
 	"testing"
@@ -79,4 +81,115 @@ func TestBuildAuthorizationURLForPlatform_Sora(t *testing.T) {
 	if got := q.Get("id_token_add_organizations"); got != "true" {
 		t.Fatalf("id_token_add_organizations mismatch: got=%q want=true", got)
 	}
+}
+
+func TestDecodeIDToken_GetUserInfoIncludesPlanTypeAndDefaultOrganization(t *testing.T) {
+	t.Parallel()
+
+	token := buildUnsignedIDToken(t, map[string]any{
+		"email": "alice@example.com",
+		"https://api.openai.com/auth": map[string]any{
+			"chatgpt_account_id": "acct_123",
+			"chatgpt_user_id":    "user_456",
+			"chatgpt_plan_type":  "pro",
+			"user_id":            "u_789",
+			"organizations": []map[string]any{
+				{"id": "org_secondary", "is_default": false},
+				{"id": "org_primary", "is_default": true},
+			},
+		},
+	})
+
+	claims, err := DecodeIDToken(token)
+	if err != nil {
+		t.Fatalf("DecodeIDToken failed: %v", err)
+	}
+
+	info := claims.GetUserInfo()
+	if info == nil {
+		t.Fatal("GetUserInfo returned nil")
+	}
+	if info.Email != "alice@example.com" {
+		t.Fatalf("email mismatch: got=%q", info.Email)
+	}
+	if info.PlanType != "pro" {
+		t.Fatalf("plan type mismatch: got=%q", info.PlanType)
+	}
+	if info.ChatGPTAccountID != "acct_123" {
+		t.Fatalf("account id mismatch: got=%q", info.ChatGPTAccountID)
+	}
+	if info.ChatGPTUserID != "user_456" {
+		t.Fatalf("user id mismatch: got=%q", info.ChatGPTUserID)
+	}
+	if info.OrganizationID != "org_primary" {
+		t.Fatalf("organization id mismatch: got=%q", info.OrganizationID)
+	}
+}
+
+func TestDecodeIDToken_AllowsExpiredPayloadWhileParseRejectsIt(t *testing.T) {
+	t.Parallel()
+
+	token := buildUnsignedIDToken(t, map[string]any{
+		"email": "expired@example.com",
+		"exp":   time.Now().Add(-10 * time.Minute).Unix(),
+	})
+
+	claims, err := DecodeIDToken(token)
+	if err != nil {
+		t.Fatalf("DecodeIDToken failed: %v", err)
+	}
+	if claims.Email != "expired@example.com" {
+		t.Fatalf("email mismatch: got=%q", claims.Email)
+	}
+
+	if _, err := ParseIDToken(token); err == nil {
+		t.Fatal("ParseIDToken should reject expired token")
+	}
+}
+
+func TestDecodeIDToken_GetUserInfoFallsBackToFirstOrganization(t *testing.T) {
+	t.Parallel()
+
+	token := buildUnsignedIDToken(t, map[string]any{
+		"email": "fallback@example.com",
+		"https://api.openai.com/auth": map[string]any{
+			"chatgpt_plan_type": "plus",
+			"organizations": []map[string]any{
+				{"id": "org_first", "is_default": false},
+				{"id": "org_second", "is_default": false},
+			},
+		},
+	})
+
+	claims, err := DecodeIDToken(token)
+	if err != nil {
+		t.Fatalf("DecodeIDToken failed: %v", err)
+	}
+
+	info := claims.GetUserInfo()
+	if info == nil {
+		t.Fatal("GetUserInfo returned nil")
+	}
+	if info.OrganizationID != "org_first" {
+		t.Fatalf("organization fallback mismatch: got=%q", info.OrganizationID)
+	}
+}
+
+func buildUnsignedIDToken(t *testing.T, claims map[string]any) string {
+	t.Helper()
+
+	header, err := json.Marshal(map[string]any{"alg": "none", "typ": "JWT"})
+	if err != nil {
+		t.Fatalf("marshal header: %v", err)
+	}
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	encode := func(src []byte) string {
+		return base64.RawURLEncoding.EncodeToString(src)
+	}
+
+	return encode(header) + "." + encode(payload) + ".signature"
 }
