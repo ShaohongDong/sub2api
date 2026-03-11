@@ -16,21 +16,11 @@ English | [中文](README_CN.md)
 
 ---
 
-## Demo
-
-Try Sub2API online: **https://demo.sub2api.org/**
-
-Demo credentials (shared demo environment; **not** created automatically for self-hosted installs):
-
-| Email | Password |
-|-------|----------|
-| admin@sub2api.com | admin123 |
-
 ## Overview
 
 Sub2API is an AI API gateway platform designed to distribute and manage API quotas from AI product subscriptions (like Claude Code $200/month). Users can access upstream AI services through platform-generated API Keys, while the platform handles authentication, billing, load balancing, and request forwarding.
 
-The canonical project repository is `ShaohongDong/sub2api`. Release checks, install scripts, and deployment examples in this repository all point to that address.
+This repository is forked from `Wei-Shaw/sub2api` and only merges stability enhancement and bug-fix commits from the upstream repository.
 
 ## Features
 
