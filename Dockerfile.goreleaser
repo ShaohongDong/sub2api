@@ -6,6 +6,7 @@
 # =============================================================================
 
 FROM alpine:3.19
+ARG TARGETPLATFORM
 
 LABEL maintainer="ShaohongDong <github.com/ShaohongDong>"
 LABEL description="Sub2API - AI API Gateway Platform"
@@ -24,8 +25,8 @@ RUN addgroup -g 1000 sub2api && \
 
 WORKDIR /app
 
-# Copy pre-built binary from GoReleaser
-COPY sub2api /app/sub2api
+# Copy pre-built binary from GoReleaser's per-platform build context
+COPY $TARGETPLATFORM/sub2api /app/sub2api
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R sub2api:sub2api /app
