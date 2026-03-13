@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -11,6 +14,49 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+type opsErrorLoggerSettingRepoStub struct {
+	values map[string]string
+}
+
+func (s *opsErrorLoggerSettingRepoStub) Get(ctx context.Context, key string) (*service.Setting, error) {
+	return nil, service.ErrSettingNotFound
+}
+
+func (s *opsErrorLoggerSettingRepoStub) GetValue(ctx context.Context, key string) (string, error) {
+	if s == nil || s.values == nil {
+		return "", service.ErrSettingNotFound
+	}
+	v, ok := s.values[key]
+	if !ok {
+		return "", service.ErrSettingNotFound
+	}
+	return v, nil
+}
+
+func (s *opsErrorLoggerSettingRepoStub) Set(ctx context.Context, key, value string) error {
+	if s.values == nil {
+		s.values = map[string]string{}
+	}
+	s.values[key] = value
+	return nil
+}
+
+func (s *opsErrorLoggerSettingRepoStub) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+	return nil, nil
+}
+
+func (s *opsErrorLoggerSettingRepoStub) SetMultiple(ctx context.Context, settings map[string]string) error {
+	return nil
+}
+
+func (s *opsErrorLoggerSettingRepoStub) GetAll(ctx context.Context) (map[string]string, error) {
+	return nil, nil
+}
+
+func (s *opsErrorLoggerSettingRepoStub) Delete(ctx context.Context, key string) error {
+	return nil
+}
 
 func resetOpsErrorLoggerStateForTest(t *testing.T) {
 	t.Helper()
@@ -273,4 +319,81 @@ func TestNormalizeOpsErrorType(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestShouldSkipOpsErrorLog_IgnoreContextCanceledFromUpstreamContext(t *testing.T) {
+	resetOpsErrorLoggerStateForTest(t)
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Set(service.OpsUpstreamErrorMessageKey, `Post "https://chatgpt.com/backend-api/codex/responses": context canceled`)
+
+	ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	require.True(t, shouldSkipOpsErrorLog(
+		c.Request.Context(),
+		ops,
+		c,
+		"Upstream request failed",
+		`{"error":{"type":"upstream_error","message":"Upstream request failed"}}`,
+		c.Request.URL.Path,
+	))
+}
+
+func TestShouldSkipOpsErrorLog_RespectsIgnoreContextCanceledSetting(t *testing.T) {
+	resetOpsErrorLoggerStateForTest(t)
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Set(service.OpsUpstreamErrorMessageKey, `Post "https://chatgpt.com/backend-api/codex/responses": context canceled`)
+
+	settings := service.OpsAdvancedSettings{
+		IgnoreContextCanceled: false,
+	}
+	raw, err := json.Marshal(settings)
+	require.NoError(t, err)
+
+	ops := service.NewOpsService(
+		nil,
+		&opsErrorLoggerSettingRepoStub{values: map[string]string{
+			service.SettingKeyOpsAdvancedSettings: string(raw),
+		}},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	require.False(t, shouldSkipOpsErrorLog(
+		c.Request.Context(),
+		ops,
+		c,
+		"Upstream request failed",
+		`{"error":{"type":"upstream_error","message":"Upstream request failed"}}`,
+		c.Request.URL.Path,
+	))
+}
+
+func TestIsClientCanceledForwardError_FromUpstreamContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Set(service.OpsUpstreamErrorMessageKey, `Post "https://chatgpt.com/backend-api/codex/responses": context canceled`)
+
+	otherErr := errors.New("other error")
+	require.True(t, isClientCanceledForwardError(c, otherErr))
+	require.True(t, isClientCanceledForwardError(c, nil))
+	require.True(t, isClientCanceledForwardError(nil, context.Canceled))
+	require.False(t, isClientCanceledForwardError(nil, otherErr))
 }

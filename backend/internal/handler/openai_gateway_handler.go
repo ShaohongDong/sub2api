@@ -305,6 +305,16 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				continue
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			if isClientCanceledForwardError(c, err) {
+				if c != nil && c.Writer != nil && !c.Writer.Written() {
+					c.Status(499)
+				}
+				reqLog.Info("openai.forward_canceled",
+					zap.Int64("account_id", account.ID),
+					zap.Error(err),
+				)
+				return
+			}
 			wroteFallback := h.ensureForwardErrorResponse(c, streamStarted)
 			fields := []zap.Field{
 				zap.Int64("account_id", account.ID),
@@ -673,6 +683,16 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 				continue
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			if isClientCanceledForwardError(c, err) {
+				if c != nil && c.Writer != nil && !c.Writer.Written() {
+					c.Status(499)
+				}
+				reqLog.Info("openai_messages.forward_canceled",
+					zap.Int64("account_id", account.ID),
+					zap.Error(err),
+				)
+				return
+			}
 			wroteFallback := h.ensureAnthropicErrorResponse(c, streamStarted)
 			reqLog.Warn("openai_messages.forward_failed",
 				zap.Int64("account_id", account.ID),
