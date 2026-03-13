@@ -2,122 +2,277 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div class="-mb-24 overflow-x-auto pb-24 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div class="flex w-full min-w-max items-center gap-2">
-            <AccountTableFilters
-              v-model:searchQuery="params.search"
-              :filters="params"
-              :groups="groups"
-              class="flex-1"
-              @update:filters="(newFilters) => Object.assign(params, newFilters)"
-              @change="debouncedReload"
-              @update:searchQuery="debouncedReload"
+        <div
+          ref="toolbarRowRef"
+          data-toolbar-role="row"
+          class="flex min-w-0 flex-nowrap items-center gap-2"
+        >
+          <div
+            data-toolbar-item="search"
+            data-toolbar-slot="main"
+            class="min-w-[140px] max-w-[200px] shrink-0 w-[min(36vw,200px)]"
+          >
+            <SearchInput
+              :model-value="params.search"
+              :placeholder="t('admin.accounts.searchAccounts')"
+              class="w-full"
+              @update:model-value="handleSearchQueryUpdate"
+              @search="debouncedReload"
             />
-            <AccountTableActions
-              class="ml-auto shrink-0"
-              :loading="loading"
-              @refresh="handleManualRefresh"
-              @create="showCreate = true"
+          </div>
+
+          <div
+            v-if="isToolbarItemVisible('platform')"
+            data-toolbar-item="platform"
+            data-toolbar-slot="main"
+            class="shrink-0"
+          >
+            <Select
+              :model-value="params.platform"
+              class="w-32 xl:w-36"
+              :options="toolbarPlatformOptions"
+              @update:model-value="updateToolbarFilter('platform', $event)"
+              @change="debouncedReload"
+            />
+          </div>
+          <div
+            v-if="isToolbarItemVisible('type')"
+            data-toolbar-item="type"
+            data-toolbar-slot="main"
+            class="shrink-0"
+          >
+            <Select
+              :model-value="params.type"
+              class="w-32 xl:w-36"
+              :options="toolbarTypeOptions"
+              @update:model-value="updateToolbarFilter('type', $event)"
+              @change="debouncedReload"
+            />
+          </div>
+          <div
+            v-if="isToolbarItemVisible('status')"
+            data-toolbar-item="status"
+            data-toolbar-slot="main"
+            class="shrink-0"
+          >
+            <Select
+              :model-value="params.status"
+              class="w-32 xl:w-36"
+              :options="toolbarStatusOptions"
+              @update:model-value="updateToolbarFilter('status', $event)"
+              @change="debouncedReload"
+            />
+          </div>
+          <div
+            v-if="isToolbarItemVisible('group')"
+            data-toolbar-item="group"
+            data-toolbar-slot="main"
+            class="shrink-0"
+          >
+            <Select
+              :model-value="params.group"
+              class="w-32 xl:w-36"
+              :options="toolbarGroupOptions"
+              @update:model-value="updateToolbarFilter('group', $event)"
+              @change="debouncedReload"
+            />
+          </div>
+          <div
+            v-if="isToolbarItemVisible('refresh')"
+            data-toolbar-item="refresh"
+            data-toolbar-slot="main"
+            class="shrink-0"
+          >
+            <button @click="handleManualRefresh" :disabled="loading" class="btn btn-secondary">
+              <Icon name="refresh" size="md" :class="[loading ? 'animate-spin' : '']" />
+              <span class="hidden md:inline">{{ t('common.refresh') }}</span>
+            </button>
+          </div>
+          <div
+            v-if="isToolbarItemVisible('export')"
+            data-toolbar-item="export"
+            data-toolbar-slot="main"
+            class="shrink-0"
+          >
+            <button @click="openExportDataDialog" class="btn btn-secondary">
+              {{ exportButtonLabel }}
+            </button>
+          </div>
+          <div
+            v-if="isToolbarItemVisible('create')"
+            data-toolbar-item="create"
+            data-toolbar-slot="main"
+            class="shrink-0"
+          >
+            <button @click="showCreate = true" class="btn btn-primary">
+              {{ t('admin.accounts.createAccount') }}
+            </button>
+          </div>
+
+          <div
+            data-toolbar-item="more"
+            data-toolbar-slot="main"
+            class="relative ml-auto shrink-0"
+          >
+            <button
+              ref="moreMenuButtonRef"
+              @click="toggleMoreMenu"
+              class="btn btn-secondary px-2 md:px-3"
+              :aria-expanded="showMoreMenu"
+              :title="t('common.more')"
             >
-              <template #after>
-                <!-- Auto Refresh Dropdown -->
-                <div class="relative" ref="autoRefreshDropdownRef">
-                  <button
-                    @click="
-                      showAutoRefreshDropdown = !showAutoRefreshDropdown;
-                      showColumnDropdown = false
-                    "
-                    class="btn btn-secondary px-2 md:px-3"
-                    :title="t('admin.accounts.autoRefresh')"
-                  >
-                    <Icon name="refresh" size="sm" :class="[autoRefreshEnabled ? 'animate-spin' : '']" />
-                    <span class="hidden md:inline">
-                      {{
-                        autoRefreshEnabled
-                          ? t('admin.accounts.autoRefreshCountdown', { seconds: autoRefreshCountdown })
-                          : t('admin.accounts.autoRefresh')
-                      }}
-                    </span>
-                  </button>
+              <svg class="h-4 w-4 md:mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+              </svg>
+              <span class="hidden md:inline">{{ t('common.more') }}</span>
+            </button>
+            <div
+              v-if="showMoreMenu"
+              ref="moreMenuRef"
+              data-testid="accounts-more-menu"
+              class="fixed z-[1000] w-80 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+              :style="moreMenuStyle"
+            >
+              <div class="p-2">
+                <template v-if="overflowToolbarIds.length > 0">
                   <div
-                    v-if="showAutoRefreshDropdown"
-                    class="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+                    v-for="item in overflowToolbarIds"
+                    :key="item"
+                    :data-toolbar-item="item"
+                    data-toolbar-slot="overflow"
+                    class="rounded-md"
                   >
-                    <div class="p-2">
-                      <button
-                        @click="setAutoRefreshEnabled(!autoRefreshEnabled)"
-                        class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-                      >
-                        <span>{{ t('admin.accounts.enableAutoRefresh') }}</span>
-                        <Icon v-if="autoRefreshEnabled" name="check" size="sm" class="text-primary-500" />
-                      </button>
-                      <div class="my-1 border-t border-gray-100 dark:border-gray-700"></div>
-                      <button
-                        v-for="sec in autoRefreshIntervals"
-                        :key="sec"
-                        @click="setAutoRefreshInterval(sec)"
-                        class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-                      >
-                        <span>{{ autoRefreshIntervalLabel(sec) }}</span>
-                        <Icon v-if="autoRefreshIntervalSeconds === sec" name="check" size="sm" class="text-primary-500" />
-                      </button>
+                    <div v-if="item === 'platform'" class="px-3 py-2">
+                      <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        {{ toolbarOverflowLabels.platform }}
+                      </div>
+                      <Select
+                        :model-value="params.platform"
+                        class="w-full"
+                        :options="toolbarPlatformOptions"
+                        @update:model-value="updateToolbarFilter('platform', $event)"
+                        @change="handleOverflowFilterChange"
+                      />
                     </div>
+                    <div v-else-if="item === 'type'" class="px-3 py-2">
+                      <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        {{ toolbarOverflowLabels.type }}
+                      </div>
+                      <Select
+                        :model-value="params.type"
+                        class="w-full"
+                        :options="toolbarTypeOptions"
+                        @update:model-value="updateToolbarFilter('type', $event)"
+                        @change="handleOverflowFilterChange"
+                      />
+                    </div>
+                    <div v-else-if="item === 'status'" class="px-3 py-2">
+                      <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        {{ toolbarOverflowLabels.status }}
+                      </div>
+                      <Select
+                        :model-value="params.status"
+                        class="w-full"
+                        :options="toolbarStatusOptions"
+                        @update:model-value="updateToolbarFilter('status', $event)"
+                        @change="handleOverflowFilterChange"
+                      />
+                    </div>
+                    <div v-else-if="item === 'group'" class="px-3 py-2">
+                      <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        {{ toolbarOverflowLabels.group }}
+                      </div>
+                      <Select
+                        :model-value="params.group"
+                        class="w-full"
+                        :options="toolbarGroupOptions"
+                        @update:model-value="updateToolbarFilter('group', $event)"
+                        @change="handleOverflowFilterChange"
+                      />
+                    </div>
+                    <button
+                      v-else-if="item === 'refresh'"
+                      @click="handleManualRefreshFromMenu"
+                      class="flex w-full items-center rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      {{ toolbarOverflowLabels.refresh }}
+                    </button>
+                    <button
+                      v-else-if="item === 'export'"
+                      @click="openExportDataDialogFromMenu"
+                      class="flex w-full items-center rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      {{ exportButtonLabel }}
+                    </button>
+                    <button
+                      v-else-if="item === 'create'"
+                      @click="openCreateFromMenu"
+                      class="flex w-full items-center rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      {{ toolbarOverflowLabels.create }}
+                    </button>
                   </div>
-                </div>
+                  <div class="my-1 border-t border-gray-100 dark:border-gray-700"></div>
+                </template>
 
-                <!-- Error Passthrough Rules -->
+                <div class="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {{ t('admin.accounts.autoRefresh') }}
+                </div>
                 <button
-                  @click="showErrorPassthrough = true"
-                  class="btn btn-secondary"
-                  :title="t('admin.errorPassthrough.title')"
+                  @click="setAutoRefreshEnabled(!autoRefreshEnabled)"
+                  class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
-                  <Icon name="shield" size="md" class="mr-1.5" />
-                  <span class="hidden md:inline">{{ t('admin.errorPassthrough.title') }}</span>
+                  <span>{{ t('admin.accounts.enableAutoRefresh') }}</span>
+                  <Icon v-if="autoRefreshEnabled" name="check" size="sm" class="text-primary-500" />
                 </button>
-
-                <!-- Column Settings Dropdown -->
-                <div class="relative" ref="columnDropdownRef">
+                <div class="grid grid-cols-2 gap-2 px-3 py-2">
                   <button
-                    @click="
-                      showColumnDropdown = !showColumnDropdown;
-                      showAutoRefreshDropdown = false
-                    "
-                    class="btn btn-secondary px-2 md:px-3"
-                    :title="t('admin.users.columnSettings')"
+                    v-for="sec in autoRefreshIntervals"
+                    :key="sec"
+                    @click="setAutoRefreshInterval(sec)"
+                    class="rounded-md border px-3 py-2 text-left text-sm transition-colors"
+                    :class="[
+                      autoRefreshIntervalSeconds === sec
+                        ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/20 dark:text-primary-200'
+                        : 'border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700'
+                    ]"
                   >
-                    <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
-                    </svg>
-                    <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
+                    {{ autoRefreshIntervalLabel(sec) }}
                   </button>
-                  <!-- Dropdown menu -->
-                  <div
-                    v-if="showColumnDropdown"
-                    class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
-                  >
-                    <div class="max-h-80 overflow-y-auto p-2">
-                      <button
-                        v-for="col in toggleableColumns"
-                        :key="col.key"
-                        @click="toggleColumn(col.key)"
-                        class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-                      >
-                        <span>{{ col.label }}</span>
-                        <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
-                      </button>
-                    </div>
-                  </div>
                 </div>
-              </template>
-              <template #beforeCreate>
-                <button @click="showImportData = true" class="btn btn-secondary">
+                <div v-if="autoRefreshEnabled" class="px-3 pb-2 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.accounts.autoRefreshCountdown', { seconds: autoRefreshCountdown }) }}
+                </div>
+                <div class="my-1 border-t border-gray-100 dark:border-gray-700"></div>
+                <button
+                  @click="openImportDataFromMenu"
+                  class="flex w-full items-center rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
                   {{ t('admin.accounts.dataImport') }}
                 </button>
-                <button @click="openExportDataDialog" class="btn btn-secondary">
-                  {{ selIds.length ? t('admin.accounts.dataExportSelected') : t('admin.accounts.dataExport') }}
+                <button
+                  @click="openErrorPassthroughFromMenu"
+                  class="flex w-full items-center rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  {{ t('admin.errorPassthrough.title') }}
                 </button>
-              </template>
-            </AccountTableActions>
+                <div class="my-1 border-t border-gray-100 dark:border-gray-700"></div>
+                <div class="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {{ t('admin.users.columnSettings') }}
+                </div>
+                <div class="max-h-72 overflow-y-auto px-2 pb-2">
+                  <button
+                    v-for="col in toggleableColumns"
+                    :key="col.key"
+                    @click="toggleColumn(col.key)"
+                    class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                  >
+                    <span>{{ col.label }}</span>
+                    <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div
@@ -282,7 +437,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -295,9 +450,9 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import SearchInput from '@/components/common/SearchInput.vue'
+import Select, { type SelectOption } from '@/components/common/Select.vue'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, TempUnschedStatusModal } from '@/components/account'
-import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
-import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
@@ -305,7 +460,6 @@ import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vu
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
 import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
 import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
-import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
 import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
 import AccountTodayStatsCell from '@/components/account/AccountTodayStatsCell.vue'
@@ -318,6 +472,9 @@ import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import type { Account, AccountPlatform, AccountType, Proxy, AdminGroup, WindowStats, ClaudeModel } from '@/types'
 
+type ToolbarOverflowItem = 'platform' | 'type' | 'status' | 'group' | 'refresh' | 'export' | 'create'
+type ToolbarFilterKey = 'platform' | 'type' | 'status' | 'group'
+
 const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
@@ -326,6 +483,7 @@ const proxies = ref<Proxy[]>([])
 const groups = ref<AdminGroup[]>([])
 const selIds = ref<number[]>([])
 const accountTableRef = ref<HTMLElement | null>(null)
+const toolbarRowRef = ref<HTMLElement | null>(null)
 useSwipeSelect(accountTableRef, {
   isSelected: (id) => selIds.value.includes(id),
   select: (id) => { if (!selIds.value.includes(id)) selIds.value.push(id) },
@@ -372,9 +530,15 @@ const togglingSchedulable = ref<number | null>(null)
 const menu = reactive<{show:boolean, acc:Account|null, pos:{top:number, left:number}|null}>({ show: false, acc: null, pos: null })
 const exportingData = ref(false)
 
-// Column settings
-const showColumnDropdown = ref(false)
-const columnDropdownRef = ref<HTMLElement | null>(null)
+const showMoreMenu = ref(false)
+const moreMenuRef = ref<HTMLElement | null>(null)
+const moreMenuButtonRef = ref<HTMLElement | null>(null)
+const moreMenuStyle = ref<Record<string, string>>({
+  top: '16px',
+  left: '16px',
+  maxHeight: 'calc(100vh - 32px)',
+})
+const overflowToolbarIds = ref<ToolbarOverflowItem[]>([])
 const hiddenColumns = reactive<Set<string>>(new Set())
 const DEFAULT_HIDDEN_COLUMNS = ['today_stats', 'proxy', 'notes', 'priority', 'rate_multiplier']
 const HIDDEN_COLUMNS_KEY = 'account-hidden-columns'
@@ -383,8 +547,6 @@ const HIDDEN_COLUMNS_KEY = 'account-hidden-columns'
 const ACCOUNT_SORT_STORAGE_KEY = 'account-table-sort'
 
 // Auto refresh settings
-const showAutoRefreshDropdown = ref(false)
-const autoRefreshDropdownRef = ref<HTMLElement | null>(null)
 const AUTO_REFRESH_STORAGE_KEY = 'account-auto-refresh'
 const autoRefreshIntervals = [5, 10, 15, 30] as const
 const accountPageSizeOptions = [5, 10, 20, 50, 100]
@@ -456,6 +618,103 @@ const autoRefreshIntervalLabel = (sec: number) => {
   if (sec === 15) return t('admin.accounts.refreshInterval15s')
   if (sec === 30) return t('admin.accounts.refreshInterval30s')
   return `${sec}s`
+}
+
+const toolbarOverflowOrder: ToolbarOverflowItem[] = ['platform', 'type', 'status', 'group', 'refresh', 'export', 'create']
+const toolbarPlatformOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('admin.accounts.allPlatforms') },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'antigravity', label: 'Antigravity' },
+  { value: 'sora', label: 'Sora' }
+])
+const toolbarTypeOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('admin.accounts.allTypes') },
+  { value: 'oauth', label: t('admin.accounts.oauthType') },
+  { value: 'setup-token', label: t('admin.accounts.setupToken') },
+  { value: 'apikey', label: t('admin.accounts.apiKey') }
+])
+const toolbarStatusOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('admin.accounts.allStatus') },
+  { value: 'active', label: t('admin.accounts.status.active') },
+  { value: 'inactive', label: t('admin.accounts.status.inactive') },
+  { value: 'error', label: t('admin.accounts.status.error') },
+  { value: 'rate_limited', label: t('admin.accounts.status.rateLimited') },
+  { value: 'temp_unschedulable', label: t('admin.accounts.status.tempUnschedulable') }
+])
+const toolbarGroupOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('admin.accounts.allGroups') },
+  ...groups.value.map(group => ({ value: String(group.id), label: group.name }))
+])
+const toolbarOverflowLabels = computed<Record<ToolbarOverflowItem, string>>(() => ({
+  platform: t('admin.accounts.allPlatforms'),
+  type: t('admin.accounts.allTypes'),
+  status: t('admin.accounts.allStatus'),
+  group: t('admin.accounts.allGroups'),
+  refresh: t('common.refresh'),
+  export: t('admin.accounts.dataExport'),
+  create: t('admin.accounts.createAccount')
+}))
+const exportButtonLabel = computed(() =>
+  selIds.value.length ? t('admin.accounts.dataExportSelected') : t('admin.accounts.dataExport')
+)
+const isToolbarItemVisible = (item: ToolbarOverflowItem) => !overflowToolbarIds.value.includes(item)
+
+let toolbarResizeObserver: ResizeObserver | null = null
+let toolbarOverflowRecalculating = false
+
+const updateToolbarFilter = (key: ToolbarFilterKey, value: string | number | boolean | null) => {
+  const nextParams = params as Record<string, any>
+  nextParams[key] = value
+}
+
+const handleSearchQueryUpdate = (value: string) => {
+  params.search = value
+  debouncedReload()
+}
+
+const handleOverflowFilterChange = () => {
+  showMoreMenu.value = false
+  debouncedReload()
+}
+
+const openCreateFromMenu = () => {
+  showMoreMenu.value = false
+  showCreate.value = true
+}
+
+const openExportDataDialogFromMenu = () => {
+  showMoreMenu.value = false
+  openExportDataDialog()
+}
+
+const handleManualRefreshFromMenu = async () => {
+  showMoreMenu.value = false
+  await handleManualRefresh()
+}
+
+const recalculateToolbarOverflow = async () => {
+  if (toolbarOverflowRecalculating) return
+  toolbarOverflowRecalculating = true
+
+  try {
+    overflowToolbarIds.value = []
+    await nextTick()
+
+    const row = toolbarRowRef.value
+    if (!row) return
+
+    const candidates = [...toolbarOverflowOrder]
+    while (row.scrollWidth > row.clientWidth && candidates.length > 0) {
+      const nextHidden = candidates.pop()
+      if (!nextHidden) break
+      overflowToolbarIds.value = [nextHidden, ...overflowToolbarIds.value]
+      await nextTick()
+    }
+  } finally {
+    toolbarOverflowRecalculating = false
+  }
 }
 
 const loadSavedColumns = () => {
@@ -533,6 +792,54 @@ const setAutoRefreshInterval = (seconds: (typeof autoRefreshIntervals)[number]) 
   if (autoRefreshEnabled.value) {
     autoRefreshCountdown.value = seconds
   }
+}
+
+const updateMoreMenuPosition = () => {
+  const button = moreMenuButtonRef.value
+  if (!button || typeof window === 'undefined') return
+
+  const rect = button.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const menuWidth = 320
+  const gutter = 16
+  const measuredHeight = moreMenuRef.value?.offsetHeight ?? 520
+
+  const left = Math.min(
+    Math.max(gutter, rect.right - menuWidth),
+    Math.max(gutter, viewportWidth - menuWidth - gutter)
+  )
+
+  const preferredTop = rect.bottom + 8
+  const top =
+    preferredTop + measuredHeight <= viewportHeight - gutter
+      ? preferredTop
+      : Math.max(gutter, rect.top - measuredHeight - 8)
+
+  moreMenuStyle.value = {
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`,
+    maxHeight: `${Math.max(160, viewportHeight - top - gutter)}px`,
+  }
+}
+
+const toggleMoreMenu = () => {
+  showMoreMenu.value = !showMoreMenu.value
+  if (showMoreMenu.value) {
+    nextTick(() => {
+      updateMoreMenuPosition()
+    })
+  }
+}
+
+const openImportDataFromMenu = () => {
+  showMoreMenu.value = false
+  showImportData.value = true
+}
+
+const openErrorPassthroughFromMenu = () => {
+  showMoreMenu.value = false
+  showErrorPassthrough.value = true
 }
 
 const toggleColumn = (key: string) => {
@@ -625,6 +932,14 @@ watch(loading, (isLoading, wasLoading) => {
       console.error('Failed to refresh account today stats after table load:', error)
     })
   }
+})
+
+watch(exportButtonLabel, () => {
+  nextTick(() => {
+    recalculateToolbarOverflow().catch((error) => {
+      console.error('Failed to recalculate toolbar overflow:', error)
+    })
+  })
 })
 
 const isAnyModalOpen = computed(() => {
@@ -1200,16 +1515,21 @@ const isExpired = (value: number | null) => {
 // 滚动时关闭操作菜单（不关闭列设置下拉菜单）
 const handleScroll = () => {
   menu.show = false
+  showMoreMenu.value = false
 }
 
-// 点击外部关闭列设置下拉菜单
+// 点击外部关闭工具栏下拉菜单
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement
-  if (columnDropdownRef.value && !columnDropdownRef.value.contains(target)) {
-    showColumnDropdown.value = false
-  }
-  if (autoRefreshDropdownRef.value && !autoRefreshDropdownRef.value.contains(target)) {
-    showAutoRefreshDropdown.value = false
+  if (target.closest('.select-dropdown-portal')) return
+  if (moreMenuRef.value?.contains(target)) return
+  if (moreMenuButtonRef.value?.contains(target)) return
+  showMoreMenu.value = false
+}
+
+const handleWindowResize = () => {
+  if (showMoreMenu.value) {
+    updateMoreMenuPosition()
   }
 }
 
@@ -1223,7 +1543,22 @@ onMounted(async () => {
     console.error('Failed to load proxies/groups:', error)
   }
   window.addEventListener('scroll', handleScroll, true)
+  window.addEventListener('resize', handleWindowResize)
   document.addEventListener('click', handleClickOutside)
+
+  await nextTick()
+  recalculateToolbarOverflow().catch((error) => {
+    console.error('Failed to recalculate toolbar overflow on mount:', error)
+  })
+
+  if (toolbarRowRef.value && typeof ResizeObserver !== 'undefined') {
+    toolbarResizeObserver = new ResizeObserver(() => {
+      recalculateToolbarOverflow().catch((error) => {
+        console.error('Failed to recalculate toolbar overflow after resize:', error)
+      })
+    })
+    toolbarResizeObserver.observe(toolbarRowRef.value)
+  }
 
   if (autoRefreshEnabled.value) {
     autoRefreshCountdown.value = autoRefreshIntervalSeconds.value
@@ -1235,6 +1570,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll, true)
+  window.removeEventListener('resize', handleWindowResize)
   document.removeEventListener('click', handleClickOutside)
+  toolbarResizeObserver?.disconnect()
 })
 </script>
