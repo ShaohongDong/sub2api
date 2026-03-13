@@ -928,7 +928,7 @@ const handleGenerateUrl = () => {
 
 const handleCopyUrl = () => {
   if (props.authUrl) {
-    copyToClipboard(props.authUrl, 'URL copied to clipboard')
+    copyToClipboard(props.authUrl, t('admin.accounts.oauth.authUrlCopied'))
   }
 }
 
@@ -960,7 +960,7 @@ const handleOpenSoraSessionUrl = () => {
 }
 
 const handleCopySoraSessionUrl = () => {
-  copyToClipboard(soraSessionUrl, 'URL copied to clipboard')
+  copyToClipboard(soraSessionUrl, t('common.copiedToClipboard'))
 }
 
 const handleImportAccessToken = () => {

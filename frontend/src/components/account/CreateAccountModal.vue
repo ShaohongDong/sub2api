@@ -2484,6 +2484,7 @@ import {
 import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
+import { useClipboard } from '@/composables/useClipboard'
 import type {
   Proxy,
   AdminGroup,
@@ -2562,6 +2563,7 @@ const emit = defineEmits<{
 }>()
 
 const appStore = useAppStore()
+const { copyToClipboard } = useClipboard()
 
 // OAuth composables
 const oauth = useAccountOAuth() // For Anthropic OAuth
@@ -3585,7 +3587,11 @@ const goBackToBasicInfo = () => {
 
 const handleGenerateUrl = async () => {
   if (form.platform === 'openai' || form.platform === 'sora') {
-    await activeOpenAIOAuth.value.generateAuthUrl(form.proxy_id)
+    const generated = await activeOpenAIOAuth.value.generateAuthUrl(form.proxy_id)
+    const authUrl = activeOpenAIOAuth.value.authUrl.value
+    if (generated && authUrl) {
+      await copyToClipboard(authUrl, t('admin.accounts.oauth.authUrlCopied'))
+    }
   } else if (form.platform === 'gemini') {
     await geminiOAuth.generateAuthUrl(
       form.proxy_id,

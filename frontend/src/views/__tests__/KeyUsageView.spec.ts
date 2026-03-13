@@ -7,6 +7,7 @@ const showSuccess = vi.fn()
 const showError = vi.fn()
 const showInfo = vi.fn()
 const fetchPublicSettings = vi.fn()
+let rafTime = 0
 
 vi.mock('@/stores', () => ({
   useAppStore: () => ({
@@ -22,23 +23,28 @@ vi.mock('@/stores', () => ({
   })
 }))
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({
-    t: (key: string) => key,
-    locale: ref('en')
-  })
-}))
+vi.mock('vue-i18n', async () => {
+  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+  return {
+    ...actual,
+    useI18n: () => ({
+      t: (key: string) => key,
+      locale: ref('en')
+    })
+  }
+})
 
 describe('KeyUsageView', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-03-11T12:00:00Z'))
     vi.clearAllMocks()
+    rafTime = 0
 
     vi.stubGlobal('fetch', vi.fn())
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0)
-      return 1
+      rafTime += 16
+      return window.setTimeout(() => cb(rafTime), 16)
     })
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -100,7 +106,7 @@ describe('KeyUsageView', () => {
     await wrapper.get('input[placeholder="keyUsage.placeholder"]').setValue('sk-test-key')
     await wrapper.get('input[placeholder="keyUsage.placeholder"]').trigger('keydown.enter')
     await flushPromises()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(1000)
 
     expect(fetch).toHaveBeenCalledWith(
       '/v1/usage?start_date=2026-03-11&end_date=2026-03-11',

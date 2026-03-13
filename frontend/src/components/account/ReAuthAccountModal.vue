@@ -194,6 +194,7 @@ import {
 import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
+import { useClipboard } from '@/composables/useClipboard'
 import type { Account } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -223,6 +224,7 @@ const emit = defineEmits<{
 
 const appStore = useAppStore()
 const { t } = useI18n()
+const { copyToClipboard } = useClipboard()
 
 // OAuth composables
 const claudeOAuth = useAccountOAuth()
@@ -333,7 +335,11 @@ const handleGenerateUrl = async () => {
   if (!props.account) return
 
   if (isOpenAILike.value) {
-    await activeOpenAIOAuth.value.generateAuthUrl(props.account.proxy_id)
+    const generated = await activeOpenAIOAuth.value.generateAuthUrl(props.account.proxy_id)
+    const authUrl = activeOpenAIOAuth.value.authUrl.value
+    if (generated && authUrl) {
+      await copyToClipboard(authUrl, t('admin.accounts.oauth.authUrlCopied'))
+    }
   } else if (isGemini.value) {
     const creds = (props.account.credentials || {}) as Record<string, unknown>
     const tierId = typeof creds.tier_id === 'string' ? creds.tier_id : undefined

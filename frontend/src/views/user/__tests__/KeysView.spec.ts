@@ -3,38 +3,40 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import KeysView from '../KeysView.vue'
 
-const list = vi.fn()
-const getDashboardApiKeysUsage = vi.fn()
-const getAvailable = vi.fn()
-const getUserGroupRates = vi.fn()
-const getPublicSettings = vi.fn()
-const showError = vi.fn()
-const showSuccess = vi.fn()
+const mocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  getDashboardApiKeysUsage: vi.fn(),
+  getAvailable: vi.fn(),
+  getUserGroupRates: vi.fn(),
+  getPublicSettings: vi.fn(),
+  showError: vi.fn(),
+  showSuccess: vi.fn()
+}))
 
 vi.mock('@/api', () => ({
   keysAPI: {
-    list,
+    list: mocks.list,
     toggleStatus: vi.fn(),
     update: vi.fn(),
     create: vi.fn(),
     delete: vi.fn()
   },
   usageAPI: {
-    getDashboardApiKeysUsage
+    getDashboardApiKeysUsage: mocks.getDashboardApiKeysUsage
   },
   userGroupsAPI: {
-    getAvailable,
-    getUserGroupRates
+    getAvailable: mocks.getAvailable,
+    getUserGroupRates: mocks.getUserGroupRates
   },
   authAPI: {
-    getPublicSettings
+    getPublicSettings: mocks.getPublicSettings
   }
 }))
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError,
-    showSuccess
+    showError: mocks.showError,
+    showSuccess: mocks.showSuccess
   })
 }))
 
@@ -51,11 +53,15 @@ vi.mock('@/composables/useClipboard', () => ({
   })
 }))
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({
-    t: (key: string) => key
-  })
-}))
+vi.mock('vue-i18n', async () => {
+  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+  return {
+    ...actual,
+    useI18n: () => ({
+      t: (key: string) => key
+    })
+  }
+})
 
 const AppLayoutStub = defineComponent({
   template: '<div><slot /></div>'
@@ -80,14 +86,14 @@ const DataTableStub = defineComponent({
   },
   template: `
     <div class="data-table-stub">
-      <div v-for="row in data" :key="(row as any).id" class="row">
-        <div v-for="col in columns" :key="(col as any).key" class="cell">
-          <slot :name="'cell-' + (col as any).key" :value="(row as any)[(col as any).key]" :row="row">
-            {{ (row as any)[(col as any).key] }}
+      <div v-for="row in data" :key="row.id" class="row">
+        <div v-for="col in columns" :key="col.key" class="cell">
+          <slot :name="'cell-' + col.key" :value="row[col.key]" :row="row">
+            {{ row[col.key] }}
           </slot>
         </div>
       </div>
-      <slot v-if="!(data as any[]).length" name="empty" />
+      <slot v-if="!data.length" name="empty" />
     </div>
   `
 })
@@ -98,7 +104,7 @@ describe('KeysView', () => {
     vi.setSystemTime(new Date('2026-03-11T12:00:00Z'))
     vi.clearAllMocks()
 
-    list.mockResolvedValue({
+    mocks.list.mockResolvedValue({
       items: [
         {
           id: 1,
@@ -130,7 +136,7 @@ describe('KeysView', () => {
       total: 1,
       pages: 1
     })
-    getDashboardApiKeysUsage.mockResolvedValue({
+    mocks.getDashboardApiKeysUsage.mockResolvedValue({
       stats: {
         1: {
           today_actual_cost: 0.1,
@@ -138,9 +144,9 @@ describe('KeysView', () => {
         }
       }
     })
-    getAvailable.mockResolvedValue([])
-    getUserGroupRates.mockResolvedValue({})
-    getPublicSettings.mockResolvedValue({})
+    mocks.getAvailable.mockResolvedValue([])
+    mocks.getUserGroupRates.mockResolvedValue({})
+    mocks.getPublicSettings.mockResolvedValue({})
   })
 
   afterEach(() => {
@@ -169,10 +175,10 @@ describe('KeysView', () => {
     })
 
     await flushPromises()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(1000)
 
-    expect(list).toHaveBeenCalled()
-    expect(getDashboardApiKeysUsage).toHaveBeenCalledWith([1], expect.any(Object))
+    expect(mocks.list).toHaveBeenCalled()
+    expect(mocks.getDashboardApiKeysUsage).toHaveBeenCalledWith([1], expect.any(Object))
     expect(wrapper.text()).toContain('$2.00/$10.00')
     expect(wrapper.text()).toContain('1h 30m')
   })

@@ -2229,6 +2229,7 @@ export default {
         generateAuthUrl: '生成授权 URL',
         generating: '生成中...',
         regenerate: '重新生成',
+        authUrlCopied: '授权链接已复制到剪贴板',
         step2OpenUrl: '在浏览器中打开 URL 并完成授权',
         openUrlDesc: '在新标签页中打开授权 URL，登录您的 Claude 账号并授权。',
         proxyWarning: '注意：如果您配置了代理，请确保浏览器使用相同的代理访问授权页面。',
