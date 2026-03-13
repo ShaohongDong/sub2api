@@ -1,9 +1,9 @@
 <template>
-  <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+  <div class="flex min-w-max flex-nowrap items-center gap-2 whitespace-nowrap">
     <SearchInput
       :model-value="searchQuery"
       :placeholder="t('admin.accounts.searchAccounts')"
-      class="min-w-[110px] flex-1 basis-[240px] sm:w-auto"
+      class="w-[240px] shrink-0"
       @update:model-value="$emit('update:searchQuery', $event)"
       @search="$emit('change')"
     />
