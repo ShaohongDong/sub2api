@@ -85,6 +85,16 @@ const DataTableStub = defineComponent({
   `,
 })
 
+const PaginationStub = defineComponent({
+  props: {
+    pageSizeOptions: {
+      type: Array,
+      default: () => [],
+    },
+  },
+  template: '<div class="pagination-stub">{{ JSON.stringify(pageSizeOptions) }}</div>',
+})
+
 import AccountsView from '../AccountsView.vue'
 
 describe('AccountsView', () => {
@@ -138,7 +148,7 @@ describe('AccountsView', () => {
           AccountTableActions: SimpleStub,
           AccountBulkActionsBar: true,
           DataTable: DataTableStub,
-          Pagination: true,
+          Pagination: PaginationStub,
           CreateAccountModal: true,
           EditAccountModal: true,
           ReAuthAccountModal: true,
@@ -170,5 +180,6 @@ describe('AccountsView', () => {
     expect(wrapper.text()).toContain('OpenAI')
     expect(wrapper.text()).toContain('OAuth')
     expect(wrapper.text()).toContain('Pro')
+    expect(wrapper.find('.pagination-stub').text()).toContain('[5,10,20,50,100]')
   })
 })

@@ -30,7 +30,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const isMobile = ref(false)
 
 const checkMobile = () => {
-  isMobile.value = window.innerWidth < 1024
+  isMobile.value = window.innerWidth < 768
 }
 
 onMounted(() => {
@@ -47,7 +47,22 @@ onUnmounted(() => {
 /* 桌面端：Flexbox 布局 */
 .table-page-layout {
   @apply flex flex-col gap-6;
-  height: calc(100vh - 64px - 4rem); /* 减去 header + lg:p-8 的上下padding */
+  height: calc(100vh - 64px - 2rem);
+  height: calc(100dvh - 64px - 2rem);
+}
+
+@media (min-width: 768px) {
+  .table-page-layout {
+    height: calc(100vh - 64px - 3rem);
+    height: calc(100dvh - 64px - 3rem);
+  }
+}
+
+@media (min-width: 1024px) {
+  .table-page-layout {
+    height: calc(100vh - 64px - 4rem);
+    height: calc(100dvh - 64px - 4rem);
+  }
 }
 
 .layout-section-fixed {
@@ -94,6 +109,11 @@ onUnmounted(() => {
 }
 
 /* 移动端：恢复正常滚动 */
+.table-page-layout.mobile-mode {
+  height: auto;
+  min-height: 0;
+}
+
 .table-page-layout.mobile-mode .table-scroll-container {
   @apply h-auto overflow-visible border-none shadow-none bg-transparent;
 }
