@@ -98,8 +98,11 @@ type UsageLog struct {
 	AccountID int64
 	RequestID string
 	Model     string
-	// ReasoningEffort is the request's reasoning effort level (OpenAI Responses API),
-	// e.g. "low" / "medium" / "high" / "xhigh". Nil means not provided / not applicable.
+	// ServiceTier records the OpenAI service tier used for billing, e.g. "priority" / "flex".
+	ServiceTier *string
+	// ReasoningEffort is the request's reasoning effort level.
+	// OpenAI: "low" / "medium" / "high" / "xhigh"; Claude: "low" / "medium" / "high" / "max".
+	// Nil means not provided / not applicable.
 	ReasoningEffort *string
 
 	GroupID        *int64
