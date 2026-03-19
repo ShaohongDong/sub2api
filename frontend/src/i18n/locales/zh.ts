@@ -1921,6 +1921,8 @@ export default {
         gemini3Flash: 'G3F',
         gemini3Image: 'GImage',
         claude: 'Claude'
+        passiveSampled: '被动采样',
+        activeQuery: '查询'
       },
       tier: {
         free: 'Free',

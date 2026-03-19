@@ -63,6 +63,38 @@
           :resets-at="usageInfo.seven_day_sonnet.resets_at"
           color="purple"
         />
+
+        <!-- Passive sampling label + active query button -->
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <span
+            v-if="usageInfo.source === 'passive'"
+            class="text-[9px] text-gray-400 dark:text-gray-500 italic"
+          >
+            {{ t('admin.accounts.usageWindow.passiveSampled') }}
+          </span>
+          <button
+            type="button"
+            class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors"
+            :disabled="activeQueryLoading"
+            @click="loadActiveUsage"
+          >
+            <svg
+              class="h-2.5 w-2.5"
+              :class="{ 'animate-spin': activeQueryLoading }"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            {{ t('admin.accounts.usageWindow.activeQuery') }}
+          </button>
+        </div>
       </div>
 
       <!-- No data yet -->
@@ -377,6 +409,7 @@ const props = defineProps<{
 const { t } = useI18n()
 
 const loading = ref(false)
+const activeQueryLoading = ref(false)
 const error = ref<string | null>(null)
 const usageInfo = ref<AccountUsageInfo | null>(null)
 
@@ -816,19 +849,79 @@ const hasIneligibleTiers = computed(() => {
   return Array.isArray(ineligibleTiers) && ineligibleTiers.length > 0
 })
 
-const loadUsage = async () => {
+// Antigravity 403 forbidden 状态
+const isForbidden = computed(() => !!usageInfo.value?.is_forbidden)
+const forbiddenType = computed(() => usageInfo.value?.forbidden_type || 'forbidden')
+const validationURL = computed(() => usageInfo.value?.validation_url || '')
+
+// 需要重新授权（401）
+const needsReauth = computed(() => !!usageInfo.value?.needs_reauth)
+
+// 降级错误标签（rate_limited / network_error）
+const usageErrorLabel = computed(() => {
+  const code = usageInfo.value?.error_code
+  if (code === 'rate_limited') return t('admin.accounts.rateLimited')
+  return t('admin.accounts.usageError')
+})
+
+const forbiddenLabel = computed(() => {
+  switch (forbiddenType.value) {
+    case 'validation':
+      return t('admin.accounts.forbiddenValidation')
+    case 'violation':
+      return t('admin.accounts.forbiddenViolation')
+    default:
+      return t('admin.accounts.forbidden')
+  }
+})
+
+const forbiddenBadgeClass = computed(() => {
+  if (forbiddenType.value === 'validation') {
+    return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
+  }
+  return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+})
+
+const linkCopied = ref(false)
+const copyValidationURL = async () => {
+  if (!validationURL.value) return
+  try {
+    await navigator.clipboard.writeText(validationURL.value)
+    linkCopied.value = true
+    setTimeout(() => { linkCopied.value = false }, 2000)
+  } catch {
+    // fallback: ignore
+  }
+}
+
+const isAnthropicOAuthOrSetupToken = computed(() => {
+  return props.account.platform === 'anthropic' && (props.account.type === 'oauth' || props.account.type === 'setup-token')
+})
+
+const loadUsage = async (source?: 'passive' | 'active') => {
   if (!shouldFetchUsage.value) return
 
   loading.value = true
   error.value = null
 
   try {
-    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id)
+    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, source)
   } catch (e: any) {
     error.value = t('common.error')
     console.error('Failed to load usage:', e)
   } finally {
     loading.value = false
+  }
+}
+
+const loadActiveUsage = async () => {
+  activeQueryLoading.value = true
+  try {
+    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active')
+  } catch (e: any) {
+    console.error('Failed to load active usage:', e)
+  } finally {
+    activeQueryLoading.value = false
   }
 }
 
@@ -887,7 +980,8 @@ const quotaTotalBar = computed((): QuotaBarInfo | null => {
 
 onMounted(() => {
   if (!shouldAutoLoadUsageOnMount.value) return
-  loadUsage()
+  const source = isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined
+  loadUsage(source)
 })
 
 watch(openAIUsageRefreshKey, (nextKey, prevKey) => {
@@ -899,4 +993,17 @@ watch(openAIUsageRefreshKey, (nextKey, prevKey) => {
     console.error('Failed to refresh OpenAI usage:', e)
   })
 })
+
+watch(
+  () => props.manualRefreshToken,
+  (nextToken, prevToken) => {
+    if (nextToken === prevToken) return
+    if (!shouldFetchUsage.value) return
+
+    const source = isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined
+    loadUsage(source).catch((e) => {
+      console.error('Failed to refresh usage after manual refresh:', e)
+    })
+  }
+)
 </script>

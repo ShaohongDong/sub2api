@@ -50,6 +50,18 @@ type accountRepository struct {
 	schedulerCache service.SchedulerCache
 }
 
+var schedulerNeutralExtraKeyPrefixes = []string{
+	"codex_primary_",
+	"codex_secondary_",
+	"codex_5h_",
+	"codex_7d_",
+	"passive_usage_",
+}
+
+var schedulerNeutralExtraKeys = map[string]struct{}{
+	"codex_usage_updated_at":     {},
+	"session_window_utilization": {},
+}
 // NewAccountRepository 创建账户仓储实例。
 // 这是对外暴露的构造函数，返回接口类型以便于依赖注入。
 func NewAccountRepository(client *dbent.Client, sqlDB *sql.DB, schedulerCache service.SchedulerCache) service.AccountRepository {
