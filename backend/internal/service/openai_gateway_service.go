@@ -213,6 +213,9 @@ type OpenAIForwardResult struct {
 	// This is set by the Anthropic Messages conversion path where
 	// the mapped upstream model differs from the client-facing model.
 	BillingModel string
+	// ServiceTier records the upstream Responses API service tier, e.g. "priority" / "flex".
+	// This is currently populated by the Anthropic Messages compatibility path.
+	ServiceTier *string
 	// ReasoningEffort is extracted from request body (reasoning.effort) or derived from model suffix.
 	// Stored for usage records display; nil means not provided / not applicable.
 	ReasoningEffort *string
