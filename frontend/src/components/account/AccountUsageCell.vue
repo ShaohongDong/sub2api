@@ -849,51 +849,6 @@ const hasIneligibleTiers = computed(() => {
   return Array.isArray(ineligibleTiers) && ineligibleTiers.length > 0
 })
 
-// Antigravity 403 forbidden 状态
-const isForbidden = computed(() => !!usageInfo.value?.is_forbidden)
-const forbiddenType = computed(() => usageInfo.value?.forbidden_type || 'forbidden')
-const validationURL = computed(() => usageInfo.value?.validation_url || '')
-
-// 需要重新授权（401）
-const needsReauth = computed(() => !!usageInfo.value?.needs_reauth)
-
-// 降级错误标签（rate_limited / network_error）
-const usageErrorLabel = computed(() => {
-  const code = usageInfo.value?.error_code
-  if (code === 'rate_limited') return t('admin.accounts.rateLimited')
-  return t('admin.accounts.usageError')
-})
-
-const forbiddenLabel = computed(() => {
-  switch (forbiddenType.value) {
-    case 'validation':
-      return t('admin.accounts.forbiddenValidation')
-    case 'violation':
-      return t('admin.accounts.forbiddenViolation')
-    default:
-      return t('admin.accounts.forbidden')
-  }
-})
-
-const forbiddenBadgeClass = computed(() => {
-  if (forbiddenType.value === 'validation') {
-    return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
-  }
-  return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-})
-
-const linkCopied = ref(false)
-const copyValidationURL = async () => {
-  if (!validationURL.value) return
-  try {
-    await navigator.clipboard.writeText(validationURL.value)
-    linkCopied.value = true
-    setTimeout(() => { linkCopied.value = false }, 2000)
-  } catch {
-    // fallback: ignore
-  }
-}
-
 const isAnthropicOAuthOrSetupToken = computed(() => {
   return props.account.platform === 'anthropic' && (props.account.type === 'oauth' || props.account.type === 'setup-token')
 })

@@ -2442,7 +2442,7 @@ export default {
         gemini3Pro: 'G3P',
         gemini3Flash: 'G3F',
         gemini3Image: 'GImage',
-        claude: 'Claude'
+        claude: 'Claude',
         passiveSampled: 'Passive',
         activeQuery: 'Query'
       },
