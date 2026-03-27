@@ -456,6 +456,7 @@ type ForwardResult struct {
 	RequestID        string
 	Usage            ClaudeUsage
 	Model            string
+	UpstreamModel    string
 	Stream           bool
 	Duration         time.Duration
 	FirstTokenMs     *int // 首字时间（流式请求）
@@ -6594,15 +6595,18 @@ func (s *GatewayService) getUserGroupRateMultiplier(ctx context.Context, userID,
 
 // RecordUsageInput 记录使用量的输入参数
 type RecordUsageInput struct {
-	Result            *ForwardResult
-	APIKey            *APIKey
-	User              *User
-	Account           *Account
-	Subscription      *UserSubscription  // 可选：订阅信息
-	UserAgent         string             // 请求的 User-Agent
-	IPAddress         string             // 请求的客户端 IP 地址
-	ForceCacheBilling bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
-	APIKeyService     APIKeyQuotaUpdater // 可选：用于更新API Key配额
+	Result             *ForwardResult
+	APIKey             *APIKey
+	User               *User
+	Account            *Account
+	Subscription       *UserSubscription  // 可选：订阅信息
+	InboundEndpoint    string             // 可选：兼容新网关落库字段
+	UpstreamEndpoint   string             // 可选：兼容新网关落库字段
+	UserAgent          string             // 请求的 User-Agent
+	IPAddress          string             // 请求的客户端 IP 地址
+	RequestPayloadHash string             // 可选：兼容新网关落库字段
+	ForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
+	APIKeyService      APIKeyQuotaUpdater // 可选：用于更新API Key配额
 }
 
 // APIKeyQuotaUpdater defines the interface for updating API Key quota and rate limit usage
