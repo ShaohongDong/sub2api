@@ -1,6 +1,6 @@
 module github.com/ShaohongDong/sub2api
 
-go 1.25.7
+go 1.25.8
 
 require (
 	entgo.io/ent v0.14.5

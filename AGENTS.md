@@ -20,7 +20,7 @@
 - `cd frontend && pnpm run build && pnpm run test:run`: production build and Vitest run.
 
 ## Coding Style & Naming Conventions
-- Go version is pinned to `1.25.7`; format with `gofmt` and keep lint clean under `backend/.golangci.yml`.
+- Go version is pinned to `1.25.8`; format with `gofmt` and keep lint clean under `backend/.golangci.yml`.
 - Respect architecture boundaries: `internal/service` and `internal/handler` must not import `internal/repository` directly (enforced by `depguard`).
 - Vue/TS uses strict TypeScript and ESLint (`frontend/.eslintrc.cjs`); keep components in `PascalCase` (`UserEditModal.vue`) and composables as `useXxx.ts`.
 - Use `pnpm` for frontend dependency changes and commit `frontend/pnpm-lock.yaml`.
