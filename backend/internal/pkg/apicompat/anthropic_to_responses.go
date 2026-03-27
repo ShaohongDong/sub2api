@@ -434,7 +434,7 @@ func normalizeToolParameters(schema json.RawMessage) json.RawMessage {
 		return schema
 	}
 
-	typ, _ := m["type"]
+	typ := m["type"]
 	if string(typ) != `"object"` {
 		return schema
 	}
